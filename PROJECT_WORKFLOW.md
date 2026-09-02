@@ -449,6 +449,34 @@ flowchart TB
 
 ## 14. Claude skills to use before starting
 
+### 14.1 Project skills — install these first, both partners
+
+They live in `.claude/skills/` in this repo, so cloning installs them. Packaged copies for sharing are in `dist/skills/*.skill`. Install notes: `.claude/skills/README.md`.
+
+| Skill | Fires when | Stage |
+|---|---|---|
+| `lab1-contract` | Writing or debugging any of the four services, transcript events, `run_id`, timestamps, role transitions | §12 stages 1–4 |
+| `lab1-conformance` | The probe, any check ID (`H-ORD`, `N-SKP`, `P-WWW`, `X-CAN`), "unreachable from campus" | §12 stage 5 |
+| `nist-63-cite` | Any claim about what NIST requires, allows, or prohibits — guards against withdrawn 63B-3 advice and invented section numbers | §12 stage 6 |
+| `lab1-review` | The six-question security self-review; the pre-zip hygiene scan | §12 stage 7 |
+| `lab1-adversary` | Red-teaming, denial tests, the adversarial hour, the chosen topic | §8.4, analysis |
+
+Three helper scripts ship with them — no dependencies beyond `curl` and `python3`:
+
+```bash
+sh .claude/skills/lab1-conformance/scripts/smoke.sh team.json --full
+```
+
+```bash
+sh .claude/skills/lab1-review/scripts/hygiene_scan.sh .
+```
+
+```bash
+sh .claude/skills/lab1-adversary/scripts/attack_curls.sh team.json
+```
+
+### 14.2 Built-in skills to pair with them
+
 | When | Skill | Why |
 |---|---|---|
 | Before anything else | `anthropic-skills:pdf` | Extract and **quote** SP 800-63-4 Figure 3 and the relevant 63A-4 / 63B-4 sections. This is the guard against invented section numbers — the failure mode the lab explicitly warns about. |
