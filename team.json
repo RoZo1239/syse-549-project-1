@@ -1,0 +1,6 @@
+{"team":"team-tbd",
+ "endpoints":{
+   "subject":"http://daily-server.research.colostate.edu:4100",
+   "csp":"http://daily-server.research.colostate.edu:4101",
+   "verifier":"http://daily-server.research.colostate.edu:4102",
+   "rp":"http://daily-server.research.colostate.edu:4103"}}

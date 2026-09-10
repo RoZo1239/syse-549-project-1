@@ -1,0 +1,21 @@
+# Secrets and local configuration
+.env
+*.pem
+*.key
+id_rsa*
+
+# Local data stores
+*.db
+*.sqlite
+*.sqlite3
+
+# Environments and caches
+venv/
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Packaged submission
+lab1-*.zip

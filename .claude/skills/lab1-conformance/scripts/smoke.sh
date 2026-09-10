@@ -81,10 +81,13 @@ for s in subject csp verifier rp; do
         verifier) url=$VERIFIER_URL ;;
         rp)       url=$RP_URL ;;
     esac
-    out=$(curl -sS -m 5 "$url/transcript" 2>/dev/null | python3 - "$s" <<'PY'
-import json, re, sys
+    body=$(curl -sS -m 5 "$url/transcript" 2>/dev/null)
+    # The payload travels in the environment, not on stdin: stdin is already
+    # carrying the here-document that holds this program.
+    out=$(LAB1_BODY="$body" python3 - "$s" <<'PY'
+import json, os, re, sys
 svc = sys.argv[1]
-raw = sys.stdin.read()
+raw = os.environ.get("LAB1_BODY", "")
 try:
     doc = json.loads(raw)
 except Exception as e:
@@ -142,10 +145,10 @@ if [ "$MODE" = "--full" ]; then
     for u in "$SUBJECT_URL" "$CSP_URL" "$VERIFIER_URL" "$RP_URL"; do
         t=$(curl -sS -m 5 "$u/transcript" 2>/dev/null)
         printf '%s' "$t" | grep -q "$CANARY" && leaked=1
-        s=$(printf '%s' "$t" | python3 - "$RUN_ID" <<'PY'
-import json, sys
+        s=$(LAB1_BODY="$t" python3 - "$RUN_ID" <<'PY'
+import json, os, sys
 try:
-    doc = json.load(sys.stdin)
+    doc = json.loads(os.environ.get("LAB1_BODY", ""))
 except Exception:
     raise SystemExit
 print(" ".join(str(e.get("step")) for e in doc.get("events", [])

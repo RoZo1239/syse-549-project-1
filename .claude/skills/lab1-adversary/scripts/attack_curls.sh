@@ -40,8 +40,9 @@ hdr() {
 show() {
     printf '  $ %s\n' "$1"
     shift
-    # shellcheck disable=SC2068
-    $@ 2>&1 | sed 's/^/  /'
+    # Quoted: an unquoted "$@" splits -H 'Authorization: ...' into three words,
+    # and the probe then sends an empty header instead of the forged one.
+    "$@" 2>&1 | sed 's/^/  /'
 }
 
 hdr "1. Bearer a token nobody issued" \
