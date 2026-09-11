@@ -1,0 +1,9 @@
+{
+  "team": "hayagreeva-jonathan",
+  "endpoints": {
+    "subject":  "http://localhost:4100",
+    "csp":      "http://localhost:4101",
+    "verifier": "http://localhost:4102",
+    "rp":       "http://localhost:4103"
+  }
+}
