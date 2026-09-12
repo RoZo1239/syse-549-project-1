@@ -123,16 +123,35 @@ class RateLimiterTestCase(unittest.TestCase):
 
 
 class ConfigTestCase(unittest.TestCase):
+    def setUp(self):
+        # A developer's own .env must not change what the suite asserts, so the
+        # settings under test are cleared first. `.env` is read once per
+        # process, so popping after that read is enough to keep it out.
+        config.load_env_file()
+        for key in ("LAB1_PORT_BLOCK", "LAB1_BIND_HOST", "HOST",
+                    "LAB1_SUBJECT_PORT", "SUBJECT_PORT",
+                    "LAB1_VERIFIER_PORT", "VERIFIER_PORT",
+                    "LAB1_RP_PORT", "RP_PORT", "LAB1_CSP_PORT", "CSP_PORT"):
+            os.environ.pop(key, None)
+
     def test_ports_follow_the_claimed_block(self):
         os.environ["LAB1_PORT_BLOCK"] = "4100"
-        os.environ.pop("LAB1_VERIFIER_PORT", None)
         self.assertEqual(config.port_for("subject"), 4100)
         self.assertEqual(config.port_for("verifier"), 4102)
         self.assertEqual(config.port_for("rp"), 4103)
 
+    def test_partner_a_settings_names_are_read_as_fallbacks(self):
+        # One .env drives all four services: the FastAPI services use TEAM,
+        # HOST and <SERVICE>_PORT, and the prefixed name wins when both are set.
+        os.environ["HOST"] = "0.0.0.0"
+        os.environ["VERIFIER_PORT"] = "4202"
+        self.assertEqual(config.bind_host(), "0.0.0.0")
+        self.assertEqual(config.port_for("verifier"), 4202)
+        os.environ["LAB1_VERIFIER_PORT"] = "4302"
+        self.assertEqual(config.port_for("verifier"), 4302)
+
     def test_services_bind_every_interface_by_default(self):
         # Binding 127.0.0.1 works on the server and is invisible from campus.
-        os.environ.pop("LAB1_BIND_HOST", None)
         self.assertEqual(config.bind_host(), "0.0.0.0")
 
     def test_a_missing_shared_token_refuses_to_start_the_service(self):
