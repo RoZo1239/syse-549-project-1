@@ -3,6 +3,11 @@
 Every command below has been run from a clean clone. Where the result depends
 on work that is not finished yet, the expected output says so.
 
+Two things could not be run in the environment this was written in and are
+therefore *not* verified here: `pip install -r requirements.txt` (no network),
+and consequently Partner A's two services starting. Everything else below was
+executed.
+
 **Status this procedure was verified against:** the Verifier and RP are
 complete; the Subject agent and CSP answer `/health`, `/transcript` and
 `/reset` but have no `POST /run`, no enrollment and no binding. So the probe
@@ -65,22 +70,28 @@ the project needs it.
 sh scripts/run_all.sh
 ```
 
-One `nohup` process per service, pidfiles and logs under `run/`. Expected:
+One `nohup` process per service, pidfiles and logs under `run/`. The script
+then reports which ones actually answer `/health`. Skipping step 1.3 looks
+exactly like this:
 
 ```
-  started subject (pid ...) -> run/subject.log
-  ...
 == health ==
-  subject   ok    {"service": "subject", "team": "...", "spec_version": "1.0"}
-  csp       ok    {"service": "csp", ...}
-  verifier  ok    {"service": "verifier", ...}
+  subject   DOWN  <urlopen error [Errno 111] Connection refused>
+            see run/subject.log
+  csp       DOWN  <urlopen error [Errno 111] Connection refused>
+            see run/csp.log
+  verifier  ok    {"service": "verifier", "team": "...", "spec_version": "1.0"}
   rp        ok    {"service": "rp", ...}
 
-all four up
+2 of 4 not answering
 ```
 
-Anything that does not answer is named, with the log to read. Start or stop
-one at a time with `sh scripts/run_all.sh rp` and `sh scripts/stop_all.sh rp`.
+`run/subject.log` then names the cause — `ModuleNotFoundError: No module named
+'fastapi'`. With the dependencies installed all four report `ok` and the last
+line reads `4 of 4 up: subject csp verifier rp`.
+
+Start or stop one at a time by naming it: `sh scripts/run_all.sh rp`,
+`sh scripts/stop_all.sh rp`.
 
 ### 1.5 Smoke test
 
@@ -118,8 +129,10 @@ services on ephemeral ports.
 python3 conformance_probe.py --config team.local.json --verbose
 ```
 
-Expected **today**: `12 of 24 checks passed, 5.0 / 10`, with all seven `H-*`
-and all four `N-*` failing because `POST /run` answers `404`. Once `POST /run`
+Expected **today**, with all four services running: `12 of 24 checks passed,
+5.0 / 10`, with all seven `H-*` and all four `N-*` failing because `POST /run`
+answers `404`. If Partner A's two are not running it is `9 of 24` instead —
+the three `S-*`/`P-*` checks that need them fail as well. Once `POST /run`
 exists and follows the sequence in
 [`decisions.md`](decisions.md#what-post-run-has-to-do-scenario-by-scenario),
 the same command scores 24 of 24 — that has been measured with a stand-in
@@ -272,8 +285,19 @@ for e in sorted(events, key=lambda e: e["ts"]):
 PY
 ```
 
-Expected, in timestamp order: step 2 (`csp`), step 3 (`subscriber`), step 4
-(`claimant`), step 5 (`verifier`, then `rp`). That `actor` column is the
+Observed, in timestamp order:
+
+```
+2026-09-12T02:14:46.255Z  step 2  csp        success  verifier
+2026-09-12T02:14:46.262Z  step 3  subscriber success  rp
+2026-09-12T02:14:46.339Z  step 4  claimant   success  verifier
+2026-09-12T02:14:46.355Z  step 5  verifier   success  verifier
+2026-09-12T02:14:46.356Z  step 5  rp         success  rp
+2026-09-12T02:14:46.392Z  step 5  rp         success  rp
+```
+
+The last line is `/protected` being served; the one before it is the session
+being established. That `actor` column is the
 Applicant → Subscriber → Claimant progression the probe checks as `H-ROL`;
 `applicant` appears once the CSP records step 1.
 
