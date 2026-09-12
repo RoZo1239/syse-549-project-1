@@ -36,6 +36,9 @@ enrollment and binding, and nothing else.
 
 ## Running it from a clean checkout
 
+Step by step, including the server and the live demo:
+**[`docs/deployment.md`](docs/deployment.md)**.
+
 ```bash
 git clone <this repo> && cd syse-549-project-1
 cp .env.example .env
@@ -56,6 +59,12 @@ python3 -m subject.main          # port block + 0   (Partner A)
 python3 -m csp.main              # port block + 1   (Partner A)
 python3 -m services.verifier     # port block + 2   (Partner B)
 python3 -m services.rp           # port block + 3   (Partner B)
+```
+
+Or start all four at once, one log per service under `run/`:
+
+```bash
+sh scripts/run_all.sh            # sh scripts/stop_all.sh to stop them
 ```
 
 Both bind `0.0.0.0` by default. A service bound to `127.0.0.1` works on the
