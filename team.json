@@ -1,9 +1,8 @@
-{
-  "team": "hayagreeva-jonathan",
-  "endpoints": {
-    "subject":  "http://localhost:4100",
-    "csp":      "http://localhost:4101",
-    "verifier": "http://localhost:4102",
-    "rp":       "http://localhost:4103"
-  }
+{"team":"team-tbd",
+ "endpoints":{
+   "subject":"http://daily-server.research.colostate.edu:4100",
+   "csp":"http://daily-server.research.colostate.edu:4101",
+   "verifier":"http://daily-server.research.colostate.edu:4102",
+   "rp":"http://daily-server.research.colostate.edu:4103"
+   }
 }
