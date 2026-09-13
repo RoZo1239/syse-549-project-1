@@ -60,7 +60,17 @@ for name in wanted:
         failed += 0 if ok else 1
     except Exception as exc:
         print("  %-9s DOWN  %s" % (name, exc))
-        print("            see run/%s.log" % name)
+        # Print the reason rather than only pointing at the log: the last
+        # meaningful line is nearly always the whole diagnosis.
+        try:
+            lines = [l.rstrip() for l in open("run/%s.log" % name) if l.strip()]
+        except OSError:
+            lines = []
+        if lines:
+            print("            %s" % lines[-1][:160])
+            print("            (full log: run/%s.log)" % name)
+        else:
+            print("            see run/%s.log" % name)
         failed += 1
 print()
 if failed:
