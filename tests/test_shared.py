@@ -9,7 +9,12 @@ from shared.pwhash import hash_secret, is_record, verify_secret
 from shared.ratelimit import RateLimiter
 from shared.timeutil import iso_from_epoch, now_iso
 from shared.transcript import STEP_NAMES, Transcript, clean_run_id
-from shared.validate import valid_authenticator_output, valid_handle, valid_identifier
+from shared.validate import (
+    normalize_identifier,
+    valid_authenticator_output,
+    valid_handle,
+    valid_identifier,
+)
 
 ISO_MS = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")
 
@@ -100,11 +105,20 @@ class ValidationTestCase(unittest.TestCase):
     def test_identifiers_must_match_the_allow_list(self):
         # An identifier is a lookup key, not free text: anything outside the
         # pattern is refused before it is used anywhere.
-        for good in ("alice", "alice.smith", "user-01", "a1b"):
+        for good in ("alice", "alice.smith", "user-01", "a1b",
+                     "jonathanchristensen123@gmail.com"):
             self.assertTrue(valid_identifier(good), good)
-        for bad in ("Alice", "al", "alice smith", "../etc", "alice';--", None, 7,
-                    "a" * 65):
+        for bad in ("al", "alice smith", "../etc", "alice';--", None, 7,
+                    "a" * 300):
             self.assertFalse(valid_identifier(bad), bad)
+
+    def test_identifiers_are_case_folded_to_one_account(self):
+        # Defends against enrolling the spelling the real owner did not take:
+        # email is compared case-insensitively in practice, so Alice@x.com and
+        # alice@x.com must be one subscriber, not two.
+        self.assertEqual(normalize_identifier("  JonathanChristensen123@Gmail.com  "),
+                         "jonathanchristensen123@gmail.com")
+        self.assertIsNone(normalize_identifier("no spaces allowed"))
 
     def test_handles_and_outputs_are_shape_checked(self):
         self.assertTrue(valid_handle("A" * 43))
