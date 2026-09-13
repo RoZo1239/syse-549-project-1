@@ -18,8 +18,8 @@ mkdir -p "$RUN_DIR"
 # Partner A's services are FastAPI modules; Partner B's are packages under services/.
 module_for() {
     case "$1" in
-        subject)  echo "subject.main" ;;
-        csp)      echo "csp.main" ;;
+        subject)  echo "services.subject.main" ;;
+        csp)      echo "services.csp.main" ;;
         verifier) echo "services.verifier" ;;
         rp)       echo "services.rp" ;;
     esac
