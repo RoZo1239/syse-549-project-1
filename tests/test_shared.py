@@ -44,6 +44,9 @@ class TranscriptTestCase(unittest.TestCase):
         self.assertEqual(event["step_name"], STEP_NAMES[1])
 
     def test_rejects_values_outside_the_contract(self):
+        # Defends against a transcript that lies: an event outside the contract's
+        # vocabulary would make the record unreadable to the grader and could
+        # smuggle an authorization-shaped role into an identity-lifecycle field.
         for bad in ({"step": 6}, {"actor": "admin"}, {"peer": "nobody"},
                     {"outcome": "maybe"}):
             with self.assertRaises(ValueError):
@@ -57,6 +60,8 @@ class TranscriptTestCase(unittest.TestCase):
             self.record(detail="output={'authenticator': 'CANARY-a1b2c3'}")
 
     def test_a_malformed_run_id_never_stops_a_denial_from_being_recorded(self):
+        # Defends against an attacker suppressing the audit trail by sending a
+        # run_id the writer chokes on, so the denial is never recorded.
         self.assertEqual(self.record(run_id="../../etc/passwd")["run_id"],
                          "unattributed")
         self.assertEqual(clean_run_id("probe-happy_path-8f3a1c"),
@@ -84,6 +89,9 @@ class PasswordHashTestCase(unittest.TestCase):
         self.assertNotIn("same-secret", str(first))
 
     def test_malformed_records_are_refused_rather_than_crashing(self):
+        # Defends against a forged or downgraded binding record - an "md5" or
+        # truncated record must fail verification, never crash into a code path
+        # that treats the failure as success.
         for bad in (None, {}, {"alg": "md5"}, dict(hash_secret("x"), salt="zz")):
             self.assertFalse(is_record(bad) and verify_secret("x", bad))
 
