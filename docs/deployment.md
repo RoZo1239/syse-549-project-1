@@ -63,7 +63,13 @@ Generate the two shared tokens and paste one into each setting in `.env`:
 ```bash
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"   # LAB1_CSP_BINDING_TOKEN
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"   # LAB1_RP_INTROSPECT_TOKEN
+chmod 600 .env
 ```
+
+The `chmod` matters on the lab server: it is a shared machine, and the default
+umask leaves new files readable by every other account on it. `.env` holds both
+shared tokens, and anyone who can read the binding token can bind an
+authenticator to any identifier — which is to say, become any subscriber.
 
 Then set the rest of `.env`:
 
@@ -218,6 +224,22 @@ probe accepts any URL, not just `host:port`. Confirm which the instructor
 wants before building it.
 
 ### 2.1 Deploy
+
+If you cloned before this branch was merged, your checkout is on `main`, which
+still carries a committed `.env` with the wrong host and the 4000-4003 ports.
+Switching branches will refuse while that file has local edits. Keep a copy,
+drop the tracked one, then switch:
+
+```bash
+cp .env ~/lab1-env.backup && chmod 600 ~/lab1-env.backup
+git checkout -- .env
+git checkout claude/clever-archimedes-wzp85q
+cp .env.example .env && chmod 600 .env
+```
+
+On this branch `.env` is untracked, so it will not come back on the next pull
+and must never be added.
+
 
 ```bash
 ssh <you>@daily-server.research.colostate.edu
