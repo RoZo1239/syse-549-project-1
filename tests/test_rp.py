@@ -77,6 +77,9 @@ class RelyingPartyTestCase(unittest.TestCase):
         step3 = [e for e in self.rp.transcript(RUN_ID) if e["step"] == 3]
         self.assertEqual([e["outcome"] for e in step3], ["success"])
         self.assertEqual(step3[0]["step_name"], "authentication_request")
+        # The probe reads the role progression off the `actor` field
+        # (check H-ROL), and this event is the Subscriber half of it.
+        self.assertEqual(step3[0]["actor"], "subscriber")
 
     def test_a_verified_assertion_produces_a_session_and_the_resource(self):
         assertion = self.enrol_and_authenticate()
