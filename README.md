@@ -28,11 +28,13 @@ with a throwaway driver (not in this repo — the Subject agent is Partner A's t
 write) scores **24 of 24, 10/10**. So the gap is `POST /run` and the CSP's
 enrollment and binding, and nothing else.
 
-> **Before deploying:** the team name and port block are not settled. `.env`
-> currently uses 4000–4003, which is outside the 4100–4199 range the lab
-> requires; claim four consecutive ports in that range on the Canvas discussion,
-> then make `.env` and `team.json` agree. `.env` also sets `HOST=127.0.0.1`,
-> which works on the server and is invisible from campus — set `HOST=0.0.0.0`.
+> **Before deploying:** team `hayagreeva-jonathan` has claimed **4100–4103** on
+> the Canvas discussion, and `team.json` and `.env.example` carry that block.
+> Two things still need doing on the server: confirm the range is actually
+> reachable from campus — the firewall rule in the server notes admits
+> `4000:4009` only — and set `HOST=0.0.0.0` in your `.env`, which currently
+> says `127.0.0.1`. Both are step 2.0 of
+> [`docs/deployment.md`](docs/deployment.md).
 
 ## Running it from a clean checkout
 

@@ -145,6 +145,57 @@ binding.
 
 No sudo. Everything runs from your home directory.
 
+### 2.0 Claim the ports, and prove they are usable
+
+There is no way to reserve a port on the machine — the server notes say the
+per-user assignments are "a convention, not something the operating system
+enforces". Claiming is three things: the post on the Canvas discussion, this
+check, and then binding the ports by leaving your services running.
+
+**Team hayagreeva-jonathan claims 4100–4103** (subject 4100, CSP 4101,
+verifier 4102, RP 4103).
+
+First, confirm nothing already holds them:
+
+```bash
+ss -tln | awk '{print $4}' | grep -E ':(4100|4101|4102|4103)$' || echo "all four free"
+```
+
+Then the check that actually matters, because the server's firewall rule
+admits campus traffic to `4000:4009` only, and says nothing about 4100–4199.
+On the server:
+
+```bash
+mkdir -p ~/port-check && cd ~/port-check
+python3 -m http.server 4100 --bind 0.0.0.0
+```
+
+From a **different campus machine** (or over the VPN):
+
+```bash
+curl -sv --max-time 8 http://daily-server.research.colostate.edu:4100/
+```
+
+| What comes back | Meaning | Next |
+|---|---|---|
+| A directory listing | the port is open from campus | stop the listener, go to 2.1 |
+| `Connection timed out` or `refused` | the firewall does not admit this range | ask the server admin for the rule below |
+| An nginx page or `Server: nginx` | nginx is answering on the port first | check course announcements |
+
+Repeat for 4103 — it confirms the whole block, not just one port.
+
+If the range is blocked, the admin needs one rule, matching the shape of the
+one already in place for 4000–4009:
+
+```bash
+sudo ufw allow from 129.82.0.0/16 to any port 4100:4103 proto tcp
+```
+
+Until that exists, the alternative is to serve all four behind the path
+already assigned to you and give the probe path-based endpoint URLs — the
+probe accepts any URL, not just `host:port`. Confirm which the instructor
+wants before building it.
+
 ### 2.1 Deploy
 
 ```bash
