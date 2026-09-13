@@ -16,7 +16,28 @@ driven by hand (part 3 below) until `POST /run` exists.
 
 ---
 
-## Part 1 — Local, on your own machine
+## Where each part runs
+
+There is no build step: the services run from the checkout, so nothing is
+produced locally and copied up. **You can do all of this on the server.**
+
+| | Where | Why |
+|---|---|---|
+| Part 1 | your machine, **optional** | faster to iterate while writing code; skip it if you just want the system up |
+| Part 2.0 first half | the server | is the port free |
+| Part 2.0 second half | **your laptop, on campus or VPN** | proving a port is reachable *from elsewhere* cannot be done from the server itself |
+| Part 2.1 | the server | clone, configure, start |
+| Part 2.2 | both | `localhost` on the server, then the hostname from your laptop |
+| Part 2.3, the probe | **your laptop** | a probe run on the server can pass while the firewall blocks everyone else; `result.json` should come from the path a grader would use |
+| Part 3, the flow by hand | the server | it calls `127.0.0.1` and imports `shared.pwhash` |
+| Part 4 | the server, then your laptop for the demo | |
+
+The probe and the tests are standard-library Python, so your laptop needs a
+clone of the repo and nothing else installed.
+
+---
+
+## Part 1 — Local, on your own machine (optional)
 
 ### 1.1 Prerequisites
 
