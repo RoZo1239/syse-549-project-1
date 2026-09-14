@@ -1,17 +1,20 @@
+import json
 import os
 import sys
 import sqlite3
 
 from typing import Optional
 from pydantic import BaseModel
-import bcrypt
 
 class User(BaseModel):
     email: str
-    password_hash: str
+    # Empty until the authenticator is issued, so it has to be allowed to be
+    # empty: declaring it a plain str made reading back any freshly created
+    # applicant raise, which is why /subscribe answered 500 for everyone.
+    verifier_record: Optional[str] = None
     subscriber_token: str
     subscribed: bool
-    
+
 class UserDatabase:
     def __init__(self):
         self.db_path = os.environ.get("DB_PATH")
@@ -30,7 +33,7 @@ class UserDatabase:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     email TEXT PRIMARY KEY,
-                    password_hash TEXT,
+                    verifier_record TEXT,
                     subscriber_token TEXT NOT NULL,
                     subscribed BOOLEAN
                 )
@@ -42,25 +45,36 @@ class UserDatabase:
     def reset(self):
         self._init_db(reset=True)
 
-    def add_user(self, email, subscriber_token):
+    def add_user(self, email, subscriber_token, verifier_record):
+        """Create, or replace, an applicant who has not yet subscribed.
+
+        `verifier_record` is the salted scrypt digest of the authenticator
+        secret, from shared.pwhash.hash_secret. The secret itself is never
+        stored and never leaves the process that received it.
+
+        The WHERE clause is the account-takeover guard: once an account is
+        subscribed, applying again must not overwrite its token or its
+        authenticator.
+        """
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO users (email, password_hash, subscriber_token, subscribed)
+                INSERT INTO users (email, verifier_record, subscriber_token, subscribed)
                 VALUES (?, ?, ?, ?)
                 ON CONFLICT(email) DO UPDATE SET
-                    password_hash = excluded.password_hash,
+                    verifier_record = excluded.verifier_record,
                     subscriber_token = excluded.subscriber_token,
                     subscribed = excluded.subscribed
                 WHERE users.subscribed = FALSE
                 """,
-                (email, None, subscriber_token, False),
+                (email, json.dumps(verifier_record), subscriber_token, False),
             )
 
     def get_user(self, email: str) -> Optional[User]:
         with self._connect() as conn:
             cursor = conn.execute(
-                "SELECT * FROM users WHERE email = ?",
+                "SELECT email, verifier_record, subscriber_token, subscribed"
+                " FROM users WHERE email = ?",
                 (email,),
             )
             row = cursor.fetchone()
@@ -69,10 +83,20 @@ class UserDatabase:
             else:
                 return User(
                     email=row[0],
-                    password_hash=row[1],
+                    verifier_record=row[1],
                     subscriber_token=row[2],
-                    subscribed=row[3]
+                    subscribed=bool(row[3])
                 )
+
+    def verifier_record(self, email: str) -> Optional[dict]:
+        """The binding record to hand the Verifier, or None."""
+        user = self.get_user(email)
+        if user is None or not user.verifier_record:
+            return None
+        try:
+            return json.loads(user.verifier_record)
+        except ValueError:
+            return None
 
     def subscribe_user(self, email, token):
         user = self.get_user(email)
@@ -82,7 +106,7 @@ class UserDatabase:
 
         if user.subscribed:
             return False
-        
+
         if(token != user.subscriber_token):
             return False
 
@@ -91,19 +115,12 @@ class UserDatabase:
                 "UPDATE users SET subscribed = TRUE WHERE email = ?",
                 (email,)
             )
-        
+
         return True
-
-    def verify_login(self, email, password_hash):
-        user = self.get_user(email)
-
-        if user is None:
-            return False
-        
-        if bcrypt.checkpw(password_hash, user.password_hash):
-            return True
-        
-        return False
 
     def user_exists(self, email) -> bool:
         return self.get_user(email) is not None
+
+    def is_subscribed(self, email) -> bool:
+        user = self.get_user(email)
+        return user is not None and user.subscribed
