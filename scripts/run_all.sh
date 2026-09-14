@@ -27,12 +27,46 @@ module_for() {
 
 WANTED=${*:-"subject csp verifier rp"}
 
+# Which of our ports are already listening, and on what address. A service
+# started by hand - or a partner's copy on the same host - holds the port
+# without a pidfile here, and launching a second one just fails obscurely.
+HELD=$(python3 - "$WANTED" <<'PORTSCAN'
+import subprocess, sys
+sys.path.insert(0, ".")
+from shared import config
+try:
+    out = subprocess.run(["ss", "-tln"], capture_output=True, text=True, timeout=5).stdout
+except Exception:
+    out = ""
+listening = {}
+for line in out.splitlines()[1:]:
+    parts = line.split()
+    if len(parts) >= 4 and ":" in parts[3]:
+        addr, _, port = parts[3].rpartition(":")
+        listening.setdefault(port, addr)
+for name in sys.argv[1].split():
+    port = str(config.port_for(name))
+    if port in listening:
+        print("%s %s %s" % (name, port, listening[port]))
+PORTSCAN
+)
+
 for s in $WANTED; do
     mod=$(module_for "$s")
     [ -n "$mod" ] || { echo "unknown service: $s"; continue; }
     pidfile="$RUN_DIR/$s.pid"
     if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
         echo "  $s already running (pid $(cat "$pidfile"))"
+        continue
+    fi
+    holder=$(printf '%s\n' "$HELD" | awk -v s="$s" '$1 == s {print $2" "$3}')
+    if [ -n "$holder" ]; then
+        hport=${holder% *}; haddr=${holder#* }
+        echo "  $s NOT started - port $hport is already held, bound to $haddr"
+        if [ "$haddr" != "0.0.0.0" ] && [ "$haddr" != "*" ]; then
+            echo "            that is not 0.0.0.0, so nothing on this host reaches it via localhost"
+        fi
+        echo "            whose: ps -eo pid,user,args | grep $s"
         continue
     fi
     nohup python3 -m "$mod" > "$RUN_DIR/$s.log" 2>&1 &
