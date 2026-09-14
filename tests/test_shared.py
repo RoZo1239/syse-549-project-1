@@ -16,15 +16,15 @@ from shared.validate import (
     valid_identifier,
 )
 
-ISO_MS = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")
+ISO_US = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$")
 
 
 class TimeTestCase(unittest.TestCase):
     def test_timestamps_are_iso8601_utc_with_sub_second_precision(self):
         # Whole-second timestamps collide across four services and the ordering
         # check (H-ORD) then fails for a reason that teaches nothing.
-        self.assertRegex(now_iso(), ISO_MS)
-        self.assertEqual(iso_from_epoch(0), "1970-01-01T00:00:00.000Z")
+        self.assertRegex(now_iso(), ISO_US)
+        self.assertEqual(iso_from_epoch(0), "1970-01-01T00:00:00.000000Z")
 
 
 class TranscriptTestCase(unittest.TestCase):
