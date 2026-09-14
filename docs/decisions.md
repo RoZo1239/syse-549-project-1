@@ -105,3 +105,49 @@ step 5 earlier in this run is expected and allowed.
 `/session` with a self-made assertion (or an `identifier` and no assertion) and
 never call the Verifier. The RP answers `401` because introspection fails;
 report `denied`.
+
+### It is written, and tested
+
+`services/subject/flow.py` implements all five, standard library only, with no
+FastAPI or pydantic dependency so it can be tested directly. `POST /run` then
+reduces to:
+
+```python
+from shared.transcript import Transcript
+from services.subject.flow import Flow
+
+transcript = Transcript()          # module level, shared with /transcript and /reset
+flow = Flow(transcript)            # peers resolved from .env, on loopback
+
+@app.post("/run")
+async def run(body: RunRequest):
+    return JSONResponse(status_code=200,
+                        content=flow.run(body.run_id, body.scenario, body.canary))
+```
+
+`GET /transcript` becomes `{"events": transcript.events()}` and `POST /reset`
+calls `transcript.reset()`, so all four services use one writer and one
+timestamp helper.
+
+`tests/test_subject_flow.py` drives it against the real Verifier and RP with a
+stand-in CSP that meets the enrollment contract above, and asserts what the
+probe asserts: all five steps present at the service that owns each, ascending
+by timestamp, the role progression in order, the canary absent from every
+transcript, and each of the four negatives denied with no successful step 5.
+
+**What the CSP still owes**, and the flow assumes:
+
+| Endpoint | Request | Must do |
+|---|---|---|
+| `POST /apply` | `{run_id, email, canary}` | store `shared.pwhash.hash_secret(canary)`, record **step 1 with `actor: "applicant"`**, return `{token}` |
+| `POST /subscribe` | `{run_id, email, token}` | mark subscribed, `POST` the stored record to the Verifier's `/binding` with `X-Lab1-Binding-Token`, record **step 2** |
+| `GET /transcript` | — | `{"events": [...]}` — currently returns `Event()`, which raises and answers 500 |
+
+### On timestamp precision
+
+`shared/timeutil.py` emits **microseconds**, not milliseconds. The probe sorts
+events by the timestamp string alone, so two events a fraction of a millisecond
+apart - the CSP recording step 2 and the Subject recording step 3 - tie, and
+the tie is broken by the order the probe collected the transcripts in, which is
+not chronological. At millisecond precision that inversion failed `H-ORD` on
+most runs; it was caught by `tests/test_subject_flow.py`, not by reasoning.
