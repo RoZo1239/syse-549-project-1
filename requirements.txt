@@ -5,3 +5,5 @@ fastapi
 uvicorn
 pydantic
 python-dotenv
+bcrypt
+requests
