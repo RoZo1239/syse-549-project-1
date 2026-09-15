@@ -44,20 +44,30 @@ BINDING_TOKEN = config.require_secret("LAB1_CSP_BINDING_TOKEN")
 # One writer, one timestamp helper, shared with the other three services.
 transcript = Transcript()
 
+# NOTE ON `def` vs `async def`
+#
+# Every handler below is a plain `def`, deliberately. FastAPI runs a non-async
+# path operation in a threadpool, while an `async def` handler runs ON the
+# event loop - so a blocking call inside one freezes the whole service, every
+# other request included. These handlers block: they hash with scrypt, they
+# touch sqlite, and they call the other services over HTTP with a synchronous
+# client. As `async def` that showed up as /health timing out rather than
+# refusing, because the socket was accepted and then never answered.
+
 app = FastAPI(title=SERVICE)
 
 user_db = UserDatabase()
 
 @app.get("/health")
-async def health():
+def health():
     return { "service": SERVICE, "team": TEAM, "spec_version": "1.0" }
 
 @app.get("/transcript")
-async def get_transcript():
+def get_transcript():
     return JSONResponse(status_code=200, content={"events": transcript.events()})
 
 @app.post("/reset")
-async def reset():
+def reset():
     # Total, not partial: a half reset leaves an account behind and the next
     # run passes for the wrong reason.
     user_db.reset()
@@ -65,7 +75,7 @@ async def reset():
     return JSONResponse(status_code=200, content={"status": "ok"})
 
 @app.post("/apply")
-async def apply(body: ApplicantRequest):
+def apply(body: ApplicantRequest):
     """Step 1. Create the subscriber account and issue the enrollment token."""
     identifier = normalize_identifier(body.email)
     if identifier is None or not body.canary:
@@ -100,7 +110,7 @@ async def apply(body: ApplicantRequest):
     )
 
 @app.post("/subscribe")
-async def subscribe(body: SubscriberRequest):
+def subscribe(body: SubscriberRequest):
     """Step 2. The applicant becomes a Subscriber and the authenticator is bound."""
     identifier = normalize_identifier(body.email)
     subscribed = identifier is not None and user_db.subscribe_user(identifier, body.token)
