@@ -9,7 +9,7 @@ import unittest
 from shared.pwhash import hash_secret
 from tests.helpers import Harness, apply_test_env
 
-CANARY = "CANARY-a1b2c3"
+CANARY = "CANARY-a1b2c3d4e5f6"
 RUN_ID = "test-happy_path-000001"
 BINDING_HEADER = {"X-Lab1-Binding-Token": "test-binding-token-0123456789"}
 INTROSPECT_HEADER = {"X-Lab1-Introspect-Token": "test-introspect-token-0123456789"}

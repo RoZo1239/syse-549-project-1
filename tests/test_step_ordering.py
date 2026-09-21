@@ -14,7 +14,7 @@ from shared.pwhash import hash_secret
 from tests.helpers import Harness, apply_test_env
 
 RUN_ID = "test-ordering-000003"
-CANARY = "CANARY-a1b2c3"
+CANARY = "CANARY-a1b2c3d4e5f6"
 
 
 class StepOrderingTestCase(unittest.TestCase):

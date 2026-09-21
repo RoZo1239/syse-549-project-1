@@ -11,6 +11,7 @@ from shared.timeutil import iso_from_epoch, now_iso
 from shared.transcript import STEP_NAMES, Transcript, clean_run_id
 from shared.validate import (
     normalize_identifier,
+    MIN_OUTPUT_LEN,
     valid_authenticator_output,
     valid_handle,
     valid_identifier,
@@ -62,7 +63,7 @@ class TranscriptTestCase(unittest.TestCase):
         # in a transcript; anything with the shape of interpolated input is
         # refused at the writer.
         with self.assertRaises(ValueError):
-            self.record(detail="output={'authenticator': 'CANARY-a1b2c3'}")
+            self.record(detail="output={'authenticator': 'CANARY-a1b2c3d4e5f6'}")
 
     def test_a_malformed_run_id_never_stops_a_denial_from_being_recorded(self):
         # Defends against an attacker suppressing the audit trail by sending a
@@ -81,8 +82,8 @@ class TranscriptTestCase(unittest.TestCase):
 
 class PasswordHashTestCase(unittest.TestCase):
     def test_a_correct_secret_verifies_and_a_wrong_one_does_not(self):
-        record = hash_secret("CANARY-a1b2c3")
-        self.assertTrue(verify_secret("CANARY-a1b2c3", record))
+        record = hash_secret("CANARY-a1b2c3d4e5f6")
+        self.assertTrue(verify_secret("CANARY-a1b2c3d4e5f6", record))
         self.assertFalse(verify_secret("CANARY-a1b2c4", record))
 
     def test_the_record_uses_a_password_hashing_function_and_a_fresh_salt(self):
@@ -123,9 +124,16 @@ class ValidationTestCase(unittest.TestCase):
     def test_handles_and_outputs_are_shape_checked(self):
         self.assertTrue(valid_handle("A" * 43))
         self.assertFalse(valid_handle("short"))
-        self.assertTrue(valid_authenticator_output("CANARY-a1b2c3"))
+        self.assertTrue(valid_authenticator_output("CANARY-a1b2c3d4e5f6"))
         self.assertFalse(valid_authenticator_output("x" * 2000))
         self.assertFalse(valid_authenticator_output(""))
+        # SP 800-63B-4 3.1.1.2: 15 characters is the floor for a password used
+        # as the sole authentication factor, which is every authenticator here.
+        # Defends against a short password being accepted at enrollment and
+        # then brute-forced offline if the verifier record ever leaks.
+        self.assertEqual(MIN_OUTPUT_LEN, 15)
+        self.assertFalse(valid_authenticator_output("x" * (MIN_OUTPUT_LEN - 1)))
+        self.assertTrue(valid_authenticator_output("x" * MIN_OUTPUT_LEN))
 
 
 class RateLimiterTestCase(unittest.TestCase):

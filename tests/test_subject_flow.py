@@ -1,8 +1,9 @@
 """The five scenarios, driven against the real Verifier and Relying Party.
 
 The CSP here is a stand-in that implements the enrollment contract in
-docs/decisions.md and nothing else: `POST /apply` takes the canary and returns
-a token, `POST /subscribe` marks the account subscribed and pushes the binding
+docs/decisions.md and nothing else: `POST /apply` takes `plaintext` (the
+harness's canary, for this scripted flow) and returns a token, `POST
+/subscribe` marks the account subscribed and pushes the binding
 record to the Verifier. Partner A's CSP is a FastAPI application and cannot be
 imported without its dependencies, so what these tests pin down is that the
 flow is correct *given* a CSP that meets the contract.
@@ -40,8 +41,8 @@ class StubCsp(JsonService):
         import secrets
 
         identifier = normalize_identifier(request.field("email"))
-        canary = request.field("canary")
-        if identifier is None or not isinstance(canary, str) or not canary:
+        plaintext = request.field("plaintext")
+        if identifier is None or not isinstance(plaintext, str) or not plaintext:
             return 400, {"error": "invalid_request"}, {}
         if identifier in self.accounts and self.accounts[identifier]["subscribed"]:
             return 409, {"error": "already_enrolled"}, {}
@@ -49,7 +50,7 @@ class StubCsp(JsonService):
         # The authenticator secret is hashed here and never stored in the clear.
         self.accounts[identifier] = {
             "token": token,
-            "record": hash_secret(canary),
+            "record": hash_secret(plaintext),
             "subscribed": False,
         }
         self.transcript.record(
@@ -119,7 +120,7 @@ class SubjectFlowTestCase(unittest.TestCase):
 
     # -- the happy path ----------------------------------------------------
     def test_happy_path_succeeds_and_records_all_five_steps(self):
-        result = self.flow.run("probe-happy_path-000001", "happy_path", "CANARY-a1b2c3")
+        result = self.flow.run("probe-happy_path-000001", "happy_path", "CANARY-a1b2c3d4e5f6")
         self.assertEqual(result["outcome"], "success", result)
         self.assertEqual(result["run_id"], "probe-happy_path-000001")
         self.assertEqual(result["scenario"], "happy_path")
@@ -134,14 +135,14 @@ class SubjectFlowTestCase(unittest.TestCase):
     def test_the_role_progression_is_visible_in_order(self):
         # H-ROL: the probe reads Applicant -> Subscriber -> Claimant off the
         # actor field, by first appearance, across every transcript.
-        self.flow.run("probe-happy_path-000002", "happy_path", "CANARY-a1b2c3")
+        self.flow.run("probe-happy_path-000002", "happy_path", "CANARY-a1b2c3d4e5f6")
         actors = [e["actor"] for e in self.merged("probe-happy_path-000002")]
         self.assertLess(actors.index("applicant"), actors.index("subscriber"))
         self.assertLess(actors.index("subscriber"), actors.index("claimant"))
 
     def test_each_step_is_recorded_by_the_service_the_probe_asks(self):
         run_id = "probe-happy_path-000003"
-        self.flow.run(run_id, "happy_path", "CANARY-a1b2c3")
+        self.flow.run(run_id, "happy_path", "CANARY-a1b2c3d4e5f6")
         csp_steps = {e["step"] for e in self.csp.transcript(run_id)}
         self.assertTrue({1, 2} <= csp_steps, "H-ST1/H-ST2 read the CSP transcript")
         self.assertIn(4, {e["step"] for e in self.verifier.transcript(run_id)})
@@ -158,7 +159,7 @@ class SubjectFlowTestCase(unittest.TestCase):
 
     # -- the four denials --------------------------------------------------
     def assert_denied_without_a_session(self, scenario, run_id):
-        result = self.flow.run(run_id, scenario, "CANARY-a1b2c3")
+        result = self.flow.run(run_id, scenario, "CANARY-a1b2c3d4e5f6")
         self.assertEqual(result["outcome"], "denied", result)
         successes = [e for e in self.rp.transcript(run_id)
                      if e["step"] == 5 and e["outcome"] == "success"]
@@ -183,21 +184,21 @@ class SubjectFlowTestCase(unittest.TestCase):
     def test_denies_a_replayed_session_credential(self):
         # Defends against reuse of a session credential after logout (N-RPL).
         # A successful step 5 earlier in this run is expected and allowed.
-        result = self.flow.run("probe-replay-000008", "replay", "CANARY-a1b2c3")
+        result = self.flow.run("probe-replay-000008", "replay", "CANARY-a1b2c3d4e5f6")
         self.assertEqual(result["outcome"], "denied", result)
         self.assertIn("reused", result["detail"])
 
     def test_an_unknown_scenario_is_denied_rather_than_crashing(self):
         # Defends against a malformed run request becoming a 500, which the
         # probe cannot distinguish from a broken service.
-        result = self.flow.run("probe-bogus-000009", "not_a_scenario", "CANARY-a1b2c3")
+        result = self.flow.run("probe-bogus-000009", "not_a_scenario", "CANARY-a1b2c3d4e5f6")
         self.assertEqual(result["outcome"], "denied")
 
     def test_a_peer_being_down_is_a_denial_not_a_crash(self):
         # Defends against fail-open: if a service cannot be reached, nobody is
         # authenticated, and /run still answers in the contract's shape.
         self.verifier.close()
-        result = self.flow.run("probe-down-000010", "happy_path", "CANARY-a1b2c3")
+        result = self.flow.run("probe-down-000010", "happy_path", "CANARY-a1b2c3d4e5f6")
         self.assertEqual(result["outcome"], "denied", result)
         self.addCleanup(lambda: None)
 

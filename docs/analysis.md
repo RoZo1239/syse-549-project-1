@@ -1,7 +1,7 @@
 # Written analysis — Lab 1, NIST SP 800-63-4 Figure 3
 
-*Drafted by Partner B; Partner A edits. Sections marked **[A]** need the
-enrollment side's detail once the Subject agent and CSP exist.*
+*Drafted by Partner B, completed with Partner A once the Subject agent and
+the CSP were built. Both partners have read all of it.*
 
 ## 1. What we built, mapped to Figure 3
 
@@ -14,17 +14,78 @@ code rather than implied.
 
 | Figure 3 element | Ours | Port |
 |---|---|---|
-| CSP | `services/csp` **[A]** | block + 1 |
+| CSP | `services/csp` | block + 1 |
 | Verifier | `services/verifier` | block + 2 |
 | Relying Party | `services/rp` | block + 3 |
-| Subject (a human in the figure) | `services/subject` **[A]** | block + 0 |
+| Subject (a human in the figure) | `services/subject` | block + 0 |
 | Trust boundary | One host, one organisation, no external identity provider | — |
 | Arrows 1–5 | Five steps, each written to `/transcript` in every service that takes part | — |
 
+What that looks like as a diagram, with our ports and endpoints on it. The
+dashed box is Figure 3's trust boundary: one host, one organisation, no
+external identity provider anywhere.
+
+```
+              +-----------------------------+
+              |      Subject agent  :4100   |     a program, not a person -
+              |  (POST /run drives a run)   |     so the role changes are
+              +-----------------------------+     lines of code, not implied
+                 |   Applicant                        |
+                 |   Subscriber   <-- the same party, |
+                 |   Claimant         three roles     |
+   . . . . . . . | . . . . . . . . . . . . . . . . . .|. . . . . . . . . .
+   .             |                                    |                  .
+   .   (1) POST /apply       (3) 401 + WWW-Authenticate                  .
+   .   (2) POST /subscribe   |                        |                  .
+   .             v           |                        v                  .
+   .      +--------------+   |              +----------------------+     .
+   .      |  CSP   :4101 |   |              |  Relying Party :4103 |     .
+   .      |  accounts,   |   +--------------|  GET /            (public) .
+   .      |  proofing,   |                  |  GET /protected      |     .
+   .      |  issuance    |                  |  POST /session       |     .
+   .      +--------------+                  |  POST /logout        |     .
+   .             |                          +----------------------+     .
+   .             | POST /binding                   ^      |              .
+   .             | (scrypt record, never            |      | POST        .
+   .             |  the secret)                (5) |      | /introspect  .
+   .             v                                 |      v              .
+   .      +-------------------------------------------------------+      .
+   .      |                 Verifier  :4102                       |      .
+   .      |   POST /binding     take the record from the CSP       |      .
+   .      |   POST /authenticate  (4) check control, mint a handle |      .
+   .      |   POST /introspect    (5) redeem the handle -> name    |      .
+   .      +-------------------------------------------------------+      .
+   .                            ^                                        .
+   .                            | (4) POST /authenticate                  .
+   . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . .
+                                |
+                        the Claimant proves control here,
+                        and NOWHERE else in the system
+```
+
+Two absences are as deliberate as anything drawn. **There is no arrow from the
+Relying Party to the CSP** — Figure 3 has none, and neither do the federated
+variants in Figures 4 and 5. An RP that could ask the CSP about an account
+would be reaching into another service's store, and the one question a security
+review of this system asks hardest is whether the RP can decide "authenticated"
+without the Verifier. It cannot, because the only way it ever learns an
+identifier is the `/introspect` response. What the RP *does* do is hand a
+stranger two URLs — `enroll_at` and `authenticate_at`, in the public page and
+in the 401 body — so a subject who was never enrolled has somewhere to go. A
+signpost is not a connection, and no request leaves the RP for the CSP.
+
+**There is no arrow from the Relying Party to the Applicant either.** The RP
+meets the subject only as a Subscriber or a Claimant; an Applicant is someone
+the RP has never heard of and has no business knowing about.
+
 The five steps as they actually run:
 
-1. **Identity proofing and enrollment [A]** — the Applicant presents evidence to
-   the CSP, which creates a subscriber account.
+1. **Identity proofing and enrollment** — the Applicant posts an email address
+   and a chosen password to the CSP's `POST /apply`. The CSP mails an
+   activation link to that address and creates the subscriber account. The
+   evidence is control of the address: whoever can read the mailbox can finish
+   enrolling, and nobody else can. That is IAL1 — self-asserted attributes with
+   one confirmable channel — and we say so rather than claiming more.
 2. **Authenticator issuance** — the CSP issues an authenticator, hashes it with
    scrypt, and hands the Verifier the resulting record over
    `POST /binding`. The secret itself never crosses that boundary. This is where
@@ -42,8 +103,14 @@ The five steps as they actually run:
    `200`.
 
 Ordering is provable rather than asserted: every event carries an ISO 8601 UTC
-timestamp with millisecond precision from one shared helper
-(`shared/timeutil.py`), so merging four transcripts by `ts` reconstructs the run.
+timestamp with **microsecond** precision from one shared helper
+(`shared/timeutil.py`), so merging four transcripts by `ts` reconstructs the
+run. Microseconds are not fussiness: the probe sorts by the timestamp *string*
+with a stable sort, so at millisecond precision two events written in the same
+millisecond keep collection order — which is service order, not time order. We
+saw exactly that, as the step sequence `[1,1,2,3,2,4,3,4,5,5,5]`, before
+changing it. `scripts/trace.py` prints the merged table the same way the probe
+sorts it, so the order we see is the order that gets graded.
 
 ## 2. The design decisions that mattered
 
@@ -74,8 +141,8 @@ not exist against 48.1 ms for a wrong secret on one that does.
 
 **Step 1, identity proofing and enrollment.** Nothing here is cryptographic to
 begin with, which is why it is the cheapest step to defeat. Our proofing is
-self-asserted **[A]**: an applicant claims an identifier and the CSP creates the
-account. An attacker does not need to break anything — they enroll. Even with a
+control of an email address, and nothing else: an applicant claims an address,
+the CSP mails a link there, and clicking it finishes the account. An attacker does not need to break anything — they enroll. Even with a
 stronger model (an invite code, an out-of-band enrollment token), the attack
 does not become cryptographic, it becomes social: work out who can cause a code
 to be issued and send them a plausible request. Every control downstream of step
