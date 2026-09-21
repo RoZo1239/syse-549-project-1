@@ -175,10 +175,15 @@ def _complete_subscription(identifier, token, run_id):
         return "verifier_unreachable"
 
     bound = status == 201
+    # One detail string for both outcomes used to put "authenticator issued and
+    # bound" next to outcome="denied", which is a transcript that contradicts
+    # itself - and the transcript is the evidence a grader reads.
     transcript.record(
         run_id=run_id, step=2, actor="csp", peer="subscriber",
         outcome="success" if bound else "denied",
-        detail="authenticator issued and bound to the subscriber account",
+        detail=("authenticator issued and bound to the subscriber account"
+                if bound else
+                "issuance incomplete: verifier did not accept the binding"),
     )
     return "ok" if bound else "not_bound"
 

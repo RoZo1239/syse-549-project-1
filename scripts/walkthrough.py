@@ -185,8 +185,26 @@ class Walkthrough:
             "POST", self.csp + "/subscribe",
             {"run_id": self.run_id, "email": identifier, "token": token},
         )
-        self.note("ROLE CHANGE: Applicant -> Subscriber.")
-        self.note("what crossed to the Verifier was the scrypt record, never the secret.")
+        if status == 200:
+            self.note("ROLE CHANGE: Applicant -> Subscriber.")
+            self.note("what crossed to the Verifier was the scrypt record, "
+                      "never the secret.")
+        else:
+            # Narrating a role change that did not happen is worse than saying
+            # nothing: in a demo it invites a question the screen contradicts.
+            self.note(colour("no role change: issuance did not complete.", RED))
+            if status == 502:
+                self.note("HTTP 502 here means the CSP reached the Verifier and "
+                          "the Verifier refused the binding. The usual cause is "
+                          "LAB1_CSP_BINDING_TOKEN differing between the two "
+                          "services - it is a shared secret and both .env files "
+                          "must carry the same value.")
+            elif status == 503:
+                self.note("HTTP 503 here means the CSP could not reach the "
+                          "Verifier at all. Check it is running and that the "
+                          "CSP resolves it on loopback.")
+            self.note("the Verifier's own transcript says which: "
+                      + colour("python3 scripts/trace.py " + self.run_id, BOLD))
         self.wait()
         return status == 200
 

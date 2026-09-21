@@ -412,6 +412,44 @@ notes ask for, so the traffic is readable. It is also the honest answer to
 layer. `docs/analysis.md` §3 says this at more length, and a capture on screen
 is the most convincing way to make the point.
 
+### 1.5b1 The two shared tokens must match across partners
+
+`LAB1_CSP_BINDING_TOKEN` and `LAB1_RP_INTROSPECT_TOKEN` are shared secrets
+between two services each:
+
+| Token | Presented by | Checked by |
+|---|---|---|
+| `LAB1_CSP_BINDING_TOKEN` | CSP, on `POST /binding` | Verifier |
+| `LAB1_RP_INTROSPECT_TOKEN` | RP, on `POST /introspect` | Verifier |
+
+When the two partners run their own halves from their own home directories,
+they have **two `.env` files**, and `.env.example` tells each of them to
+generate a fresh random token. Generate independently and they will not match.
+
+The symptom is a `502` from `POST /subscribe` and this pair of transcript
+lines:
+
+```
+verifier  step 2  csp -> verifier    denied  binding rejected: caller could not present the CSP token
+csp       step 2  csp -> subscriber  denied  issuance incomplete: verifier did not accept the binding
+```
+
+Enrollment succeeds, step 2 fails, and nothing after it can work — the
+Verifier holds no binding, so `/authenticate` has nothing to check against.
+
+**Fix:** one partner generates both values once and sends them over; the other
+pastes the same two into their own `.env`. Then restart. They are shared
+secrets, not per-person ones.
+
+```bash
+python3 -c "import secrets; print('LAB1_CSP_BINDING_TOKEN=' + secrets.token_urlsafe(32))"
+python3 -c "import secrets; print('LAB1_RP_INTROSPECT_TOKEN=' + secrets.token_urlsafe(32))"
+```
+
+Everything else in `.env` is per-person and may differ freely —
+`FRONTEND_PORT`, and `EMAIL_USERNAME`/`EMAIL_PASSWORD`, which only the
+partner running the CSP needs at all.
+
 ### 1.5c Smoke test
 
 ```bash
