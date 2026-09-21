@@ -65,7 +65,7 @@ Canvas side).
 
 | Requirement | Status | What is left |
 |---|---|---|
-| `lab1-hayagreeva-jonathan.zip`, under 25 MB | **missing** | build it from a clean checkout, after `result.json` exists |
+| `lab1-hayagreeva-jonathan.zip`, under 25 MB | **missing** | `sh scripts/package.sh` once `result.json` exists — it refuses to build until the archive would be correct |
 | Source for all four services | done | |
 | `README.md`: four URLs with ports | done | |
 | `README.md`: how to run from a clean checkout | done | |

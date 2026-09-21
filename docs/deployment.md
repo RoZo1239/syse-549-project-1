@@ -934,6 +934,50 @@ directories, likewise gitignored; and a "private key material" hit on the
 scanner itself, which is the script matching its own search pattern.
 `result.json` must be present, from a **deployed** run.
 
+### Building the submission archive
+
+```bash
+sh scripts/package.sh
+```
+
+It refuses to build until the archive would be correct, then writes
+`lab1-hayagreeva-jonathan.zip`.
+
+**Why `git archive` and not `zip -r .`**: it packs only *tracked* files. `.env`,
+`app.db`, `run/`, `frontend/node_modules` and `__pycache__` are gitignored and
+therefore untracked, so they cannot reach the zip by being forgotten. §9.1
+makes a committed credential an automatic deduction; this removes the chance
+to make that mistake rather than relying on remembering a checklist.
+
+What it checks before packing:
+
+| Check | Why it refuses |
+|---|---|
+| Working tree is clean | `git archive` ships *committed* files, so anything uncommitted would be silently missing |
+| `result.json` exists and parses | required deliverable |
+| Its endpoints are **not** loopback | a probe run on the server can pass while the firewall blocks everyone else; §9.1 wants the deployed system as a grader would reach it |
+| README, `.env.example`, probe, tests and all four services are tracked | otherwise they are not in the zip |
+| No `.env`, `*.pem`, `*.key`, `*.db`, `node_modules` is tracked | the automatic-deduction list |
+| `.env.example` holds placeholders, not a real token | same |
+
+It then re-scans the staged tree before zipping, so the guarantee does not
+depend on the gitignore being right.
+
+Verify it yourself afterwards — the script prints these two lines:
+
+```bash
+unzip -l lab1-hayagreeva-jonathan.zip | head -40
+unzip -l lab1-hayagreeva-jonathan.zip | grep -iE 'env|\.db|node_modules|pem|key'
+```
+
+The second must return **only** `.env.example`. And the strongest check of all
+is to extract it somewhere else and run the suite from there:
+
+```bash
+cd /tmp && unzip -q ~/syse-549-project-1/lab1-hayagreeva-jonathan.zip
+cd lab1-hayagreeva-jonathan && python3 -m unittest discover -s tests -t .
+```
+
 ### Checklist for the slot itself
 
 - [ ] all four services already running before the slot begins
