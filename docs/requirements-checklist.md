@@ -49,7 +49,7 @@ Canvas side).
 | Requirement | Where | Status |
 |---|---|---|
 | Probe run early and often | `conformance_probe.py`, plus `scripts/diagnose.py` to read the result | done |
-| Suite runs from a single command | `python3 -m unittest discover -s tests -t .` — 83 tests | done |
+| Suite runs from a single command | `python3 -m unittest discover -s tests -t .` — 85 tests | done |
 | Suite does not touch the live database | every test uses ephemeral ports and in-process state | done |
 | Positive tests: enrollment, verification, session | `test_verifier.py`, `test_rp.py`, `test_subject_flow.py` | done |
 | Wrong authenticator rejected without revealing the account exists | `test_verifier.py` | done |
@@ -109,17 +109,78 @@ Canvas side).
 
 ## What is actually left
 
-1. **`result.json` from the deployment.** Nothing else in §9 can be finished
-   without it, and it is the graded number.
-2. **The three failing checks on the deployment.** The same code scores 24 of
-   24 on one host, so this is a deployment difference. Run
-   `python3 conformance_probe.py --config team.json --json result.json` from a
-   campus machine, then `python3 scripts/diagnose.py result.json`.
-3. **The campus-reachability question for the instructor** — 4100–4103 direct,
-   or proxied through nginx? Everything in §2 and §5 above waits on it.
-4. **Build the archive**, after 1 and 2.
-5. **Export `docs/analysis.md` to PDF.**
-6. **Pick the chosen topic** and rehearse it.
-7. **The cross-partner rehearsal**: each partner presents the other's two
-   services. This is the row the instructor kit says separates teams, and it
-   costs one hour.
+Ordered by what blocks what. Items 1–3 are one afternoon on campus and they
+unblock everything else.
+
+### Blocking — nothing else in §9 can finish without these
+
+1. **Get `result.json` from the deployment.** It is the graded number for the
+   Conformance Testing row (10 points) and the archive cannot ship without it.
+   From a campus machine or the VPN:
+   ```bash
+   python3 conformance_probe.py --config team.json --json result.json
+   ```
+2. **Identify the three checks failing there.** The same code scores 24 of 24
+   on one host, so this is a deployment difference, not a code one — do not
+   start editing services. Feed the result file to the explainer:
+   ```bash
+   python3 scripts/diagnose.py result.json
+   ```
+   Most likely cause, unconfirmed until the IDs are known: one side of the
+   deployment is still running pre-merge code, and a Subject sending `canary`
+   against a CSP expecting `plaintext` would take the `H-*` and `N-*` groups
+   down together. Redeploy both halves from this branch first and re-run.
+3. **Settle the campus-reachability question with the instructor.** 4100–4103
+   directly, or proxied through nginx? The server's firewall notes admit
+   `4000:4009` only. `docs/deployment.md` §2.0 has the test to run and the
+   exact `ufw` rule to ask for. Every row in §2 and §5 above waits on this.
+
+### Deliverables, after 1–3
+
+4. **Export `docs/analysis.md` to PDF.** The content is complete — diagram,
+   decisions, two steps defeated without cryptography, the weakest point, where
+   the AI misled us, and a critique of the automated review. It has never been
+   rendered.
+5. **Build `lab1-hayagreeva-jonathan.zip`** from a clean checkout. Run
+   `sh .claude/skills/lab1-review/scripts/hygiene_scan.sh .` first; the only
+   expected complaints are `__pycache__`, `.env` and the scanner matching its
+   own search pattern.
+
+### Presentation
+
+6. **Pick the chosen topic** (6 minutes, and it feeds the Technical Content
+   row). Three candidates, in order of how much of our own work they draw on:
+   - **Account pre-hijacking at enrollment** — our own finding, found by a test
+     rather than by reading code, with a fix whose costs we can name. Written
+     up in `docs/decisions.md` A.6 and `docs/adversarial.md` §14.
+   - **Bearer credentials and what sender-constraining would change** — we
+     already pin sessions to an address and can say exactly how little that
+     buys on a single-host deployment.
+   - **Why the RP never calls the CSP**, and what a self-asserted login would
+     cost — `docs/decisions.md` B.3, and it maps onto SP 800-207's PEP/PDP
+     split.
+7. **Rehearse `sh scripts/demo.sh` against the deployment**, not against
+   localhost. Off campus, remember `LAB1_PROBE_CONFIG=team.local.json`.
+8. **The cross-partner rehearsal**: each partner walks through the *other*
+   partner's two services, and traces one request end to end through all four.
+   This is the System Understanding row (7 points), it is scored entirely
+   off-script, and it costs one hour.
+9. **Update the deck** with what has landed since it was built: the
+   pre-hijacking finding, the frontend now driving all five steps, and the
+   honest two-number probe story. Also note the deck has never been visually
+   rendered — no converter was available — so open it once before the slot.
+
+### Optional, not required
+
+10. **Demo the browser flow as well as the scripts.** It works end to end now,
+    and with `VITE_API_HOST` pointed at the server the five steps cross a real
+    interface for a Wireshark capture. `docs/deployment.md` §1.5b.
+11. **Expire pending applications** in the CSP. It would remove the address
+    -squatting cost of the pre-hijacking fix. Named as not-built in
+    `docs/decisions.md` A.6 on purpose — a known, stated limitation reads
+    better than a silent one.
+
+### Explicitly not ours
+
+- The Canvas port-claim post (done), the nginx configuration, and whether the
+  instructor wants proxied URLs in the probe config.

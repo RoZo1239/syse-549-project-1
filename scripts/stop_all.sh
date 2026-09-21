@@ -1,8 +1,12 @@
 #!/bin/sh
 # Stop the services started by run_all.sh.
 #
-#   sh scripts/stop_all.sh           stop everything
+#   sh scripts/stop_all.sh           stop the four services
 #   sh scripts/stop_all.sh rp        stop only the ones named
+#   sh scripts/stop_all.sh frontend  stop the React dev server too
+#
+# The default list is the four contract services, matching run_all.sh: the
+# frontend is opt-in on the way up, so it is opt-in on the way down.
 set -u
 
 cd "$(dirname "$0")/.." || exit 1

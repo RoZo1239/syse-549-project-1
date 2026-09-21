@@ -9,7 +9,13 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<LoginPage onLogin={setSession} />} />
+      {/* The landing page is the thing the subject actually wanted. With no
+          session that produces the RP's 401 - Figure 3 step 3 - rather than a
+          login form the browser decided to show on its own. */}
+      <Route
+        path="/"
+        element={<ProtectedPage session={session} onLogout={() => setSession(null)} />}
+      />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/login" element={<LoginPage onLogin={setSession} />} />
       <Route

@@ -31,7 +31,7 @@ class EmailService:
         EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
         return bool(EMAIL_RE.match(email))
 
-    def send_activation(self, email, token):
+    def send_activation(self, email, token, run_id=""):
         if not self.valid_email(email):
             logger.warning(f"Skipping activation email to '{email}': invalid email.")
             return False
@@ -40,7 +40,12 @@ class EmailService:
             logger.warning(f"Skipping activation email to '{email}': missing credentials.")
             return False
 
-        url = f"{self.base_url}/activate?{urlencode({'email': email, 'token': token})}"
+        params = {"email": email, "token": token}
+        if run_id:
+            # So the click lands in the transcript under the same run as the
+            # application it came from.
+            params["run_id"] = run_id
+        url = f"{self.base_url}/activate?{urlencode(params)}"
 
         try:
             with open(TEMPLATE_PATH, "r", encoding="utf-8") as f:

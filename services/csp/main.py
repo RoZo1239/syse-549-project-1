@@ -131,7 +131,7 @@ def apply(body: ApplicantRequest):
 
     token = secrets.token_urlsafe(32)
     user_db.add_user(identifier, token, hash_secret(body.plaintext))
-    email_service.send_activation(identifier, token)
+    email_service.send_activation(identifier, token, body.run_id)
 
     # actor="applicant" is load bearing: the probe reads the Applicant ->
     # Subscriber -> Claimant progression off this field, and this is the only
@@ -209,14 +209,20 @@ def _activation_page(title: str, message: str) -> str:
     )
 
 @app.get("/activate", response_class=HTMLResponse)
-def activate(email: str, token: str):
+def activate(email: str, token: str, run_id: str = ""):
     """Step 2, for a human: the link mailed by /apply, answered with a page.
 
     Not part of the machine contract — the Subject agent drives step 2
     through the JSON POST /subscribe above, not this endpoint.
+
+    `run_id` is optional and carried through so that a browser-driven signup
+    still lands its step 2 under the same run as its step 1. Without it the
+    activation click was recorded as UNATTRIBUTED, and a run traced from the
+    UI was missing one of the five arrows. A malformed or absent value is
+    handled by shared.transcript.clean_run_id, not here.
     """
     identifier = normalize_identifier(email)
-    result = _complete_subscription(identifier, token, None)
+    result = _complete_subscription(identifier, token, run_id)
     if result == "ok":
         return HTMLResponse(_activation_page(
             "Account activated",
