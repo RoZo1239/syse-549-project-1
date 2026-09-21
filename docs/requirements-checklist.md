@@ -75,7 +75,7 @@ Canvas side).
 | `result.json` from the **deployed** system | **missing** | the blocker for the archive; last deployed run was 21 of 24 and the three failures are not yet identified |
 | No virtualenvs, `node_modules`, database files | done | all in `.gitignore`; `frontend/node_modules` is excluded |
 | No secrets: no keys, no real `.env`, no live hashes | done | `.env.example` has placeholders only; verify again with `sh .claude/skills/lab1-review/scripts/hygiene_scan.sh` before zipping |
-| Written analysis, 2–3 pages | **partial** | `docs/analysis.md` is complete in content; it has not been exported to PDF |
+| Written analysis, 2–3 pages | done | `docs/analysis.md`, trimmed to the five required points (~1,660 words + diagram). `lab1-written-analysis.docx` is generated from it by `node docs/analysis-docx.js`; export to PDF from Word |
 | — a diagram of what we built, mapped to Figure 3 | done | `docs/analysis.md` §1 |
 | — the design decisions and why | done | §2, full register in `docs/decisions.md` |
 | — two of five steps defeated without breaking cryptography | done | §3: step 1 (enrollment fraud) and step 5 (bearer-credential theft), plus step 4 by relay |
