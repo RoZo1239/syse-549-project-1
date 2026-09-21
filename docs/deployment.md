@@ -5,7 +5,7 @@ Where a result depends on something not finished yet, the expected output says
 so.
 
 **Status this procedure was last verified against:** all four services
-complete, all five scenarios working, `85 tests ... OK` and **24 of 24 checks,
+complete, all five scenarios working, `88 tests ... OK` and **24 of 24 checks,
 10.0 / 10** from the probe with the four running on one host. The deployment on
 `daily-server` last scored **21 of 24** — same code, so that gap is a
 deployment difference and part 2 is where it gets chased, not the services.
@@ -479,7 +479,7 @@ valid JSON with sub-second timestamps.
 python3 -m unittest discover -s tests -t .
 ```
 
-Expected: `Ran 85 tests ... OK (skipped=10)`. The ten skips are Partner B's
+Expected: `Ran 88 tests ... OK (skipped=10)`. The ten skips are Partner B's
 cross-review tests for Partner A's services; they run when those services are
 up:
 

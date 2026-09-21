@@ -117,3 +117,41 @@ cross-review test had been skipping for weeks because Partner A's CSP was not
 running. The moment it had a live service to talk to, it failed on the first
 run. It is the second time on this project that running something beat
 reasoning about it.
+
+---
+
+## 15. One refused binding permanently bricked the account
+
+**Tried:** clicking the activation link while the CSP and the Verifier held
+different `LAB1_CSP_BINDING_TOKEN` values — the state a two-partner deployment
+lands in by default, since `.env.example` tells each of them to generate one.
+
+**Found:** *"Activation failed. This activation link is invalid or has already
+been used."* Both halves of that message were wrong, and the second click said
+the same thing for a different reason.
+
+`_complete_subscription()` marked the account subscribed **before** attempting
+the Verifier binding. So the first click spent the enrollment token, failed to
+bind, and returned `not_bound` — which fell through to the same page as an
+invalid token. The account was now subscribed-but-unbound: the Verifier held
+no record, so authentication could never succeed, and the activation link
+could never be retried because the token was gone. One transient Verifier
+problem destroyed the account, and the error blamed the link.
+
+**Why it matters beyond the bug.** The message sends the subscriber to
+re-enrol, which cannot help — `/apply` refuses an identifier that already
+exists (probe 14). Nothing the user can do recovers the account. A denial that
+names the wrong cause is worse than a vague one: it spends the victim's effort
+on the wrong repair.
+
+**Fixed** in three parts. `token_matches()` checks the token without spending
+it; the account is marked subscribed only after the Verifier returns 201; and
+`not_bound` gets its own page — *"Your link is valid, but we could not finish
+setting up your account. Nothing has been used up."* While in there, the token
+comparison moved from `==` to `hmac.compare_digest`, since it is a secret and
+`==` short-circuits.
+
+**Measured, with the tokens deliberately mismatched:** click one and click two
+both return `502 Activation incomplete`; after correcting the token the *same*
+link returns `200 Account activated`; and only then does a third click return
+`400 Activation failed`, which is the one case where that message is true.

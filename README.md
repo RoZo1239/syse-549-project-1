@@ -125,7 +125,7 @@ One command, all of it, never touching a running deployment:
 python3 -m unittest discover -s tests -t .
 ```
 
-85 tests. Every test named `test_denies_*` carries one sentence naming the
+88 tests. Every test named `test_denies_*` carries one sentence naming the
 attack it defends against.
 
 The cross-review tests for Partner A's services skip with a printed reason

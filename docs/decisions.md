@@ -289,7 +289,7 @@ python3 scripts/walkthrough.py                # or --all, or any one scenario
 # 3. see what the four transcripts recorded, merged and in probe order
 python3 scripts/trace.py --last
 
-# 4. the unit suite: 85 tests, one command, never touches a deployment
+# 4. the unit suite: 88 tests, one command, never touches a deployment
 python3 -m unittest discover -s tests -t .
 
 # 5. the same script the instructor runs

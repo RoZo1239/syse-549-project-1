@@ -49,7 +49,7 @@ Canvas side).
 | Requirement | Where | Status |
 |---|---|---|
 | Probe run early and often | `conformance_probe.py`, plus `scripts/diagnose.py` to read the result | done |
-| Suite runs from a single command | `python3 -m unittest discover -s tests -t .` — 85 tests | done |
+| Suite runs from a single command | `python3 -m unittest discover -s tests -t .` — 88 tests | done |
 | Suite does not touch the live database | every test uses ephemeral ports and in-process state | done |
 | Positive tests: enrollment, verification, session | `test_verifier.py`, `test_rp.py`, `test_subject_flow.py` | done |
 | Wrong authenticator rejected without revealing the account exists | `test_verifier.py` | done |
