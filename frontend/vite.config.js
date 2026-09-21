@@ -44,9 +44,13 @@ export default defineConfig(({ mode }) => {
   // 5173 then refuses for a reason that looks like the app is broken. Fail
   // loudly instead. host is left at Vite's default (localhost) on purpose -
   // 5173 is outside our 4100-4103 block, so it must not be published.
-  return {
-    plugins: [react()],
-    server: { port, strictPort: true, proxy },
-    preview: { port, strictPort: true, proxy },
-  };
+  // host is pinned to 127.0.0.1 rather than left at Vite's default of
+  // "localhost". Node resolves that name, and on a machine where localhost
+  // resolves to ::1 first, Vite binds [::1]:PORT only - at which point
+  // `ssh -L PORT:127.0.0.1:PORT` is refused by the server end and the app
+  // looks broken when it is running perfectly. Pinning the literal address
+  // removes the resolution step. It is still loopback-only, so nothing is
+  // published on a port we did not claim.
+  const server = { host: "127.0.0.1", port, strictPort: true, proxy };
+  return { plugins: [react()], server, preview: server };
 });

@@ -80,6 +80,8 @@ start_frontend() {
     pidfile="$RUN_DIR/frontend.pid"
     if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
         echo "  frontend already running (pid $(cat "$pidfile"))"
+        echo "    a port change in .env does not reach a running server -"
+        echo "    'sh scripts/stop_all.sh frontend' first to move it"
         return
     fi
     if [ ! -d "$ROOT/frontend/node_modules" ]; then
@@ -157,7 +159,8 @@ print()
 if failed:
     print("%d of %d not answering" % (failed, len(wanted)))
 else:
-    print("%d of %d up: %s" % (len(wanted), len(wanted), " ".join(wanted)))
+    if wanted:
+        print("%d of %d up: %s" % (len(wanted), len(wanted), " ".join(wanted)))
 PY
 
 # Not one of the four contract services, so it gets its own line rather than
