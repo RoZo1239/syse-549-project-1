@@ -153,13 +153,49 @@ Vite's dev server binds `localhost` by default, which is exactly right on a
 shared machine: nothing unclaimed is exposed. **Do not add `--host`.** Reach
 it over an SSH tunnel from your own machine instead:
 
-```bash
-# on the server
-cd ~/syse-549-project-1/frontend && npm run dev
+You need **two terminals**: `ssh -N` gives you no shell, so nothing can be
+started in the tunnel's window.
 
-# on your laptop, in another terminal
+```bash
+# terminal 1, ON THE SERVER
+cd ~/syse-549-project-1
+VITE_PORT=5173 sh scripts/run_all.sh frontend
+#   frontend  ok    http://127.0.0.1:5173      <- wait for this line
+
+# terminal 2, on your laptop
 ssh -N -L 5173:127.0.0.1:5173 <you>@daily-server.research.colostate.edu
 ```
+
+**Pick a different `VITE_PORT` per person.** Loopback on a shared host is not
+per-user: if both partners run a dev server, the second one collides with the
+first, and a tunnel aimed at 5173 reaches whichever one won — silently, and
+possibly the other person's. Agree on one each (5173 and 5174, say) and tunnel
+to your own. The config sets `strictPort`, so a collision is a startup error
+rather than Vite quietly moving to the next port and binding something else
+you did not claim.
+
+#### `channel N: open failed: connect failed: Connection refused`
+
+The tunnel is fine — SSH connected and opened the channel. That message comes
+from the *server* end, and it means nothing is listening on `127.0.0.1:<port>`
+there. In order of likelihood:
+
+```bash
+# on the server
+tail -20 ~/syse-549-project-1/run/frontend.log   # did it start, or fail?
+ss -tln | grep 517                               # is anything listening?
+```
+
+- **It never started.** `ssh -N` has no shell; the dev server has to be
+  launched from a separate session.
+- **It failed on startup.** Almost always esbuild's blocked postinstall —
+  `npm rebuild esbuild`, then start it again.
+- **It is on a different port.** With `strictPort` it now errors instead, but
+  an older checkout would have moved to 5174 and said so in a line that is
+  easy to miss. `tail` the log and tunnel to what it actually printed.
+
+A partner already holding the port does *not* produce this error: you would
+reach their page instead of a refusal.
 
 Then open <http://localhost:5173> on your laptop. The browser is yours, the
 services are the server's, and no extra port is published on a machine other

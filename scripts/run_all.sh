@@ -59,7 +59,10 @@ for name in sys.argv[1].split():
 PORTSCAN
 )
 
-FRONTEND_PORT=5173
+# Override per person when two of you share a host: VITE_PORT=5174 sh
+# scripts/run_all.sh frontend. Vite is started with strictPort, so a
+# collision is an error rather than a silent move to the next port.
+FRONTEND_PORT=${VITE_PORT:-5173}
 
 start_frontend() {
     pidfile="$RUN_DIR/frontend.pid"
@@ -73,7 +76,7 @@ start_frontend() {
     fi
     (
         cd "$ROOT/frontend" || exit 1
-        nohup npm run dev > "$RUN_DIR/frontend.log" 2>&1 &
+        VITE_PORT="$FRONTEND_PORT" nohup npm run dev > "$RUN_DIR/frontend.log" 2>&1 &
         echo $! > "$pidfile"
     )
     echo "  started frontend (pid $(cat "$pidfile")) -> run/frontend.log"
