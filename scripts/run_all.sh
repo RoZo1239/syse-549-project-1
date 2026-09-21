@@ -59,7 +59,22 @@ for name in sys.argv[1].split():
 PORTSCAN
 )
 
-FRONTEND_PORT=5173
+# The dev server's port. Read from .env (FRONTEND_PORT) so each partner can
+# set their own without editing code, and overridable for one run with
+# VITE_PORT=... sh scripts/run_all.sh frontend.
+#
+# It defaults OUTSIDE the lab's 4100-4199 range on purpose. We claimed four
+# ports, 4100-4103, and all four are in use by the four services; there is no
+# spare inside our block. A port elsewhere in 4100-4199 belongs to whichever
+# team claimed that block, and the lab is explicit that binding one we did not
+# claim breaks their demonstration. Outside the range no claim exists to
+# collide with. Vite is started with strictPort, so a collision is an error
+# rather than a silent move to the next port.
+FRONTEND_PORT=${VITE_PORT:-$(
+    sed -n 's/^[[:space:]]*FRONTEND_PORT[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' \
+        "$ROOT/.env" 2>/dev/null | tail -1
+)}
+FRONTEND_PORT=${FRONTEND_PORT:-5173}
 
 start_frontend() {
     pidfile="$RUN_DIR/frontend.pid"
@@ -73,7 +88,7 @@ start_frontend() {
     fi
     (
         cd "$ROOT/frontend" || exit 1
-        nohup npm run dev > "$RUN_DIR/frontend.log" 2>&1 &
+        VITE_PORT="$FRONTEND_PORT" nohup npm run dev > "$RUN_DIR/frontend.log" 2>&1 &
         echo $! > "$pidfile"
     )
     echo "  started frontend (pid $(cat "$pidfile")) -> run/frontend.log"

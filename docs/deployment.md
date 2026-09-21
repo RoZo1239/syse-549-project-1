@@ -143,6 +143,108 @@ Without `npm install` the script says so and starts the other four anyway:
   frontend NOT started - run 'npm install' in frontend/ first
 ```
 
+### 1.4c Running the frontend *on the server*
+
+Two things bite here and neither is obvious from the npm output.
+
+**Port 5173 is not a port we claimed.** The lab's ground rules say to bind
+only the four ports on our Discussion post, and 5173 is outside 4100–4103.
+Vite's dev server binds `localhost` by default, which is exactly right on a
+shared machine: nothing unclaimed is exposed. **Do not add `--host`.** Reach
+it over an SSH tunnel from your own machine instead:
+
+You need **two terminals**: `ssh -N` gives you no shell, so nothing can be
+started in the tunnel's window.
+
+```bash
+# terminal 1, ON THE SERVER
+cd ~/syse-549-project-1
+sh scripts/run_all.sh frontend               # port from .env
+#   frontend  ok    http://127.0.0.1:5173      <- tunnel to THIS
+
+# terminal 2, on your laptop
+ssh -N -L 5173:127.0.0.1:5173 <you>@daily-server.research.colostate.edu
+```
+
+**Setting the port.** `FRONTEND_PORT` in your `.env` is the durable place;
+`VITE_PORT=... sh scripts/run_all.sh frontend` overrides it for one run.
+`run_all.sh` prints the URL it actually bound, so tunnel to that rather than
+to what you assumed.
+
+**Why the default sits outside 4100–4199.** We claimed four ports and all four
+are in use by the four services — there is no spare inside our block. Any
+other port in the lab's range belongs to the team that claimed that block, and
+§4.4 is explicit: *"Do not bind to ports you did not claim. Doing so will
+break another team's demonstration."* Outside the range there is no claim to
+collide with. If you want one in-range, claim a fifth on the Discussion board
+first and then set `FRONTEND_PORT` to it — the machinery does not care which
+number it is.
+
+**Pick a different one per person.** Loopback on a shared host is not
+per-user: if both partners run a dev server, the second one collides with the
+first, and a tunnel aimed at 5173 reaches whichever one won — silently, and
+possibly the other person's. Agree on one each (5173 and 5174, say) and tunnel
+to your own. The config sets `strictPort`, so a collision is a startup error
+rather than Vite quietly moving to the next port and binding something else
+you did not claim.
+
+#### `channel N: open failed: connect failed: Connection refused`
+
+The tunnel is fine — SSH connected and opened the channel. That message comes
+from the *server* end, and it means nothing is listening on `127.0.0.1:<port>`
+there. In order of likelihood:
+
+```bash
+# on the server
+tail -20 ~/syse-549-project-1/run/frontend.log   # did it start, or fail?
+ss -tln | grep 517                               # is anything listening?
+```
+
+- **It never started.** `ssh -N` has no shell; the dev server has to be
+  launched from a separate session.
+- **It failed on startup.** Almost always esbuild's blocked postinstall —
+  `npm rebuild esbuild`, then start it again.
+- **It is on a different port.** With `strictPort` it now errors instead, but
+  an older checkout would have moved to 5174 and said so in a line that is
+  easy to miss. `tail` the log and tunnel to what it actually printed.
+
+A partner already holding the port does *not* produce this error: you would
+reach their page instead of a refusal.
+
+Then open <http://localhost:5173> on your laptop. The browser is yours, the
+services are the server's, and no extra port is published on a machine other
+teams are sharing.
+
+The alternative — run the frontend on your laptop and point it at the
+server's four services — is in 1.4b:
+`VITE_API_HOST=daily-server.research.colostate.edu npm run dev`. That one puts
+the traffic on a real interface for packet capture; the tunnel keeps it on
+loopback. Pick by which you need.
+
+**npm 11 blocks esbuild's postinstall.** The install prints:
+
+```
+npm warn install-scripts   esbuild@0.21.5 (postinstall: node install.js)
+```
+
+That postinstall is what puts esbuild's platform binary in place, and Vite
+will not start without it. Approve it once:
+
+```bash
+npm install-scripts approve esbuild   # npm 11+
+npm rebuild esbuild                   # or this, on any npm
+```
+
+Then `npm run dev` again. If it was already fine, both are harmless no-ops.
+
+**On `npm audit`.** `npm install` reports advisories against dev
+dependencies — the bundler and its transitive packages. Do **not** run
+`npm audit fix --force`: it upgrades Vite across a major version and will
+break the proxy config this UI depends on. Nothing in the graded contract
+ships any of it; the dev server is a local tool, not a deployed service. That
+is a defensible answer and a better one than a broken build, but say it out
+loud rather than leaving it unmentioned.
+
 ### 1.5 Watch it actually run
 
 Three scripts, in the order you will reach for them.

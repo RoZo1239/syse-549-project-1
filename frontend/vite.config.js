@@ -21,6 +21,11 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
   const host = env.VITE_API_HOST || "127.0.0.1";
   const block = Number(env.VITE_PORT_BLOCK || 4100);
+  // Two people sharing one server means two dev servers wanting 5173.
+  // Loopback is not per-user, so whoever starts second collides with the
+  // first - and an SSH tunnel aimed at 5173 would reach whichever one won.
+  // Set VITE_PORT per person.
+  const port = Number(process.env.VITE_PORT || env.VITE_PORT || 5173);
 
   const to = (offset) => ({
     target: `http://${host}:${block + offset}`,
@@ -33,9 +38,15 @@ export default defineConfig(({ mode }) => {
     "/api/rp": { ...to(3), rewrite: (p) => p.replace(/^\/api\/rp/, "") },
   };
 
+  // strictPort: without it Vite silently moves to 5174 when 5173 is taken and
+  // prints it in a line that is easy to miss. On a shared server that means
+  // quietly binding a second port we did not claim, and an SSH tunnel aimed at
+  // 5173 then refuses for a reason that looks like the app is broken. Fail
+  // loudly instead. host is left at Vite's default (localhost) on purpose -
+  // 5173 is outside our 4100-4103 block, so it must not be published.
   return {
     plugins: [react()],
-    server: { port: 5173, proxy },
-    preview: { port: 5173, proxy },
+    server: { port, strictPort: true, proxy },
+    preview: { port, strictPort: true, proxy },
   };
 });
