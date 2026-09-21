@@ -131,7 +131,7 @@ def apply(body: ApplicantRequest):
 
     token = secrets.token_urlsafe(32)
     user_db.add_user(identifier, token, hash_secret(body.plaintext))
-    email_service.send_activation(identifier, token, body.run_id)
+    email_sent = email_service.send_activation(identifier, token, body.run_id)
 
     # actor="applicant" is load bearing: the probe reads the Applicant ->
     # Subscriber -> Claimant progression off this field, and this is the only
@@ -142,7 +142,7 @@ def apply(body: ApplicantRequest):
     )
     return JSONResponse(
         status_code=201,
-        content=ApplicantResponse(token=token).model_dump(),
+        content=ApplicantResponse(token=token, email_sent=bool(email_sent)).model_dump(),
     )
 
 def _complete_subscription(identifier, token, run_id):
@@ -175,10 +175,15 @@ def _complete_subscription(identifier, token, run_id):
         return "verifier_unreachable"
 
     bound = status == 201
+    # One detail string for both outcomes used to put "authenticator issued and
+    # bound" next to outcome="denied", which is a transcript that contradicts
+    # itself - and the transcript is the evidence a grader reads.
     transcript.record(
         run_id=run_id, step=2, actor="csp", peer="subscriber",
         outcome="success" if bound else "denied",
-        detail="authenticator issued and bound to the subscriber account",
+        detail=("authenticator issued and bound to the subscriber account"
+                if bound else
+                "issuance incomplete: verifier did not accept the binding"),
     )
     return "ok" if bound else "not_bound"
 

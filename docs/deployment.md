@@ -328,11 +328,25 @@ person and would be a failure for the probe — the two drive the system
 differently and the transcript records what actually happened, which is the
 point of having one. Say this out loud if you trace a browser run in the demo.
 
-**If no mail server is configured**, step 2 is not a dead end: the CSP returns
-the enrollment token in the `/apply` response as well as mailing it, and the
-Sign up page offers the activation link directly. That is deliberate — the
-graded contract is machine-to-machine and must not need a working SMTP
-account.
+**No activation email? That is the default.** `EMAIL_USERNAME` and
+`EMAIL_PASSWORD` are unset unless you set them, and the CSP treats mail as
+best-effort: it logs `Skipping activation email ... missing credentials` and
+carries on. Step 2 is still not a dead end — `/apply` returns the enrollment
+token in its response as well as mailing it, and the Sign up page shows an
+**Activate this account** link. Following that link *is* step 2.
+
+`/apply` reports `email_sent` so the page can say which case you are in rather
+than hedging. Check it directly:
+
+```bash
+curl -s -X POST http://127.0.0.1:4101/apply -H 'Content-Type: application/json' \
+  -d '{"run_id":"check","email":"you@example.test","plaintext":"a-real-15-plus-char-password"}'
+# {"token": "...", "email_sent": false}
+```
+
+Wiring up real mail is optional and never graded. If you do it, use a
+throwaway account and an app password — the server's own notes say not to put
+anything sensitive on it, and `.env` must stay out of the submitted archive.
 
 **Correlating the browser with the transcripts.** The Sign up and Protected
 pages both print the `run_id` they used. Copy it:
@@ -397,6 +411,44 @@ notes ask for, so the traffic is readable. It is also the honest answer to
 "what is the weakest point in your system": everything below the application
 layer. `docs/analysis.md` §3 says this at more length, and a capture on screen
 is the most convincing way to make the point.
+
+### 1.5b1 The two shared tokens must match across partners
+
+`LAB1_CSP_BINDING_TOKEN` and `LAB1_RP_INTROSPECT_TOKEN` are shared secrets
+between two services each:
+
+| Token | Presented by | Checked by |
+|---|---|---|
+| `LAB1_CSP_BINDING_TOKEN` | CSP, on `POST /binding` | Verifier |
+| `LAB1_RP_INTROSPECT_TOKEN` | RP, on `POST /introspect` | Verifier |
+
+When the two partners run their own halves from their own home directories,
+they have **two `.env` files**, and `.env.example` tells each of them to
+generate a fresh random token. Generate independently and they will not match.
+
+The symptom is a `502` from `POST /subscribe` and this pair of transcript
+lines:
+
+```
+verifier  step 2  csp -> verifier    denied  binding rejected: caller could not present the CSP token
+csp       step 2  csp -> subscriber  denied  issuance incomplete: verifier did not accept the binding
+```
+
+Enrollment succeeds, step 2 fails, and nothing after it can work — the
+Verifier holds no binding, so `/authenticate` has nothing to check against.
+
+**Fix:** one partner generates both values once and sends them over; the other
+pastes the same two into their own `.env`. Then restart. They are shared
+secrets, not per-person ones.
+
+```bash
+python3 -c "import secrets; print('LAB1_CSP_BINDING_TOKEN=' + secrets.token_urlsafe(32))"
+python3 -c "import secrets; print('LAB1_RP_INTROSPECT_TOKEN=' + secrets.token_urlsafe(32))"
+```
+
+Everything else in `.env` is per-person and may differ freely —
+`FRONTEND_PORT`, and `EMAIL_USERNAME`/`EMAIL_PASSWORD`, which only the
+partner running the CSP needs at all.
 
 ### 1.5c Smoke test
 
