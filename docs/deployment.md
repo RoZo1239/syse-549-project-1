@@ -412,6 +412,111 @@ notes ask for, so the traffic is readable. It is also the honest answer to
 layer. `docs/analysis.md` §3 says this at more length, and a capture on screen
 is the most convincing way to make the point.
 
+### 1.5b0 Starting clean, both partners, in order
+
+Run this when the deployment has drifted — mismatched tokens, orphan
+processes, one partner running the other's services. It takes five minutes and
+ends with a verified end-to-end run.
+
+**Who owns what.** One process per port, and only its owner starts it.
+Two people racing to start a CSP is how you get stale pidfiles and
+`EADDRINUSE`.
+
+| | Partner A (Jonathan) | Partner B (Hayagreeva) |
+|---|---|---|
+| Services | Subject `4100`, CSP `4101` | Verifier `4102`, RP `4103` |
+| Also holds | `EMAIL_USERNAME` / `EMAIL_PASSWORD` — only the CSP sends mail | — |
+
+---
+
+**Step 1 — both, at the same time: stop everything and update.**
+
+```bash
+cd ~/syse-549-project-1
+sh scripts/stop_all.sh --force          # clears orphans a pidfile cannot
+sh scripts/stop_all.sh frontend --force
+git pull
+```
+
+`--force` matches on the module name, scoped to your own user id, so it never
+touches another team's services on the shared host.
+
+**Step 2 — ONE of you generates both tokens. Once.**
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"   # LAB1_CSP_BINDING_TOKEN
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"   # LAB1_RP_INTROSPECT_TOKEN
+```
+
+Send both values to the other partner over whatever channel you would use for
+a password — not a shared chat log. Anyone holding
+`LAB1_CSP_BINDING_TOKEN` can bind any authenticator to any identifier and
+become that subscriber.
+
+**Step 3 — both: paste the same two values into your own `.env`.**
+
+```bash
+$EDITOR .env
+#   LAB1_CSP_BINDING_TOKEN=<the value you were sent>
+#   LAB1_RP_INTROSPECT_TOKEN=<the value you were sent>
+```
+
+Check them before starting anything:
+
+```bash
+python3 scripts/check_tokens.py
+```
+
+Send each other the two fingerprint lines. **Both must match.** They are
+hashes, so they are safe to paste anywhere.
+
+**Step 4 — Partner B starts the authentication side first.**
+
+```bash
+sh scripts/run_all.sh verifier rp       # -> 2 of 2 up: verifier rp
+```
+
+Verifier first so the CSP has something to bind against the moment it starts.
+
+**Step 5 — Partner A starts the enrollment side.**
+
+```bash
+sh scripts/run_all.sh subject csp       # -> 2 of 2 up: subject csp
+grep -i EMAIL_ run/csp.log              # silent = mail configured
+```
+
+**Step 6 — either partner: prove it end to end.**
+
+```bash
+python3 scripts/walkthrough.py --no-pause happy_path
+```
+
+Want `verdict: SUCCESS` and all eight transcript lines. If not:
+
+| Where it stops | What it means |
+|---|---|
+| step 2, `502` | `LAB1_CSP_BINDING_TOKEN` still differs — back to step 3 |
+| step 5, `401` | `LAB1_RP_INTROSPECT_TOKEN` differs — back to step 3 |
+| any step, `503` | that service is not running — check `run/<service>.log` |
+
+**Step 7 — the graded number.** From a laptop on campus or VPN, not from the
+server:
+
+```bash
+python3 conformance_probe.py --config team.json --json result.json --verbose
+python3 scripts/diagnose.py result.json     # if it is not 24 of 24
+```
+
+**Step 8 — optional, the browser.** Whoever is demoing:
+
+```bash
+echo "FRONTEND_PORT=4133" >> .env      # or any port; see 1.4c on why not 4100-4199
+sh scripts/run_all.sh frontend
+sh scripts/frontend_status.sh          # says which port it actually bound
+```
+
+Then tunnel from your laptop to the port that line printed.
+
 ### 1.5b1 The two shared tokens must match across partners
 
 `LAB1_CSP_BINDING_TOKEN` and `LAB1_RP_INTROSPECT_TOKEN` are shared secrets
