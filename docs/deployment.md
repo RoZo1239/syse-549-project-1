@@ -159,14 +159,28 @@ started in the tunnel's window.
 ```bash
 # terminal 1, ON THE SERVER
 cd ~/syse-549-project-1
-VITE_PORT=5173 sh scripts/run_all.sh frontend
-#   frontend  ok    http://127.0.0.1:5173      <- wait for this line
+sh scripts/run_all.sh frontend               # port from .env
+#   frontend  ok    http://127.0.0.1:5173      <- tunnel to THIS
 
 # terminal 2, on your laptop
 ssh -N -L 5173:127.0.0.1:5173 <you>@daily-server.research.colostate.edu
 ```
 
-**Pick a different `VITE_PORT` per person.** Loopback on a shared host is not
+**Setting the port.** `FRONTEND_PORT` in your `.env` is the durable place;
+`VITE_PORT=... sh scripts/run_all.sh frontend` overrides it for one run.
+`run_all.sh` prints the URL it actually bound, so tunnel to that rather than
+to what you assumed.
+
+**Why the default sits outside 4100–4199.** We claimed four ports and all four
+are in use by the four services — there is no spare inside our block. Any
+other port in the lab's range belongs to the team that claimed that block, and
+§4.4 is explicit: *"Do not bind to ports you did not claim. Doing so will
+break another team's demonstration."* Outside the range there is no claim to
+collide with. If you want one in-range, claim a fifth on the Discussion board
+first and then set `FRONTEND_PORT` to it — the machinery does not care which
+number it is.
+
+**Pick a different one per person.** Loopback on a shared host is not
 per-user: if both partners run a dev server, the second one collides with the
 first, and a tunnel aimed at 5173 reaches whichever one won — silently, and
 possibly the other person's. Agree on one each (5173 and 5174, say) and tunnel
