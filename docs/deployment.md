@@ -143,6 +143,58 @@ Without `npm install` the script says so and starts the other four anyway:
   frontend NOT started - run 'npm install' in frontend/ first
 ```
 
+### 1.4c Running the frontend *on the server*
+
+Two things bite here and neither is obvious from the npm output.
+
+**Port 5173 is not a port we claimed.** The lab's ground rules say to bind
+only the four ports on our Discussion post, and 5173 is outside 4100–4103.
+Vite's dev server binds `localhost` by default, which is exactly right on a
+shared machine: nothing unclaimed is exposed. **Do not add `--host`.** Reach
+it over an SSH tunnel from your own machine instead:
+
+```bash
+# on the server
+cd ~/syse-549-project-1/frontend && npm run dev
+
+# on your laptop, in another terminal
+ssh -N -L 5173:127.0.0.1:5173 <you>@daily-server.research.colostate.edu
+```
+
+Then open <http://localhost:5173> on your laptop. The browser is yours, the
+services are the server's, and no extra port is published on a machine other
+teams are sharing.
+
+The alternative — run the frontend on your laptop and point it at the
+server's four services — is in 1.4b:
+`VITE_API_HOST=daily-server.research.colostate.edu npm run dev`. That one puts
+the traffic on a real interface for packet capture; the tunnel keeps it on
+loopback. Pick by which you need.
+
+**npm 11 blocks esbuild's postinstall.** The install prints:
+
+```
+npm warn install-scripts   esbuild@0.21.5 (postinstall: node install.js)
+```
+
+That postinstall is what puts esbuild's platform binary in place, and Vite
+will not start without it. Approve it once:
+
+```bash
+npm install-scripts approve esbuild   # npm 11+
+npm rebuild esbuild                   # or this, on any npm
+```
+
+Then `npm run dev` again. If it was already fine, both are harmless no-ops.
+
+**On `npm audit`.** `npm install` reports advisories against dev
+dependencies — the bundler and its transitive packages. Do **not** run
+`npm audit fix --force`: it upgrades Vite across a major version and will
+break the proxy config this UI depends on. Nothing in the graded contract
+ships any of it; the dev server is a local tool, not a deployed service. That
+is a defensible answer and a better one than a broken build, but say it out
+loud rather than leaving it unmentioned.
+
 ### 1.5 Watch it actually run
 
 Three scripts, in the order you will reach for them.
