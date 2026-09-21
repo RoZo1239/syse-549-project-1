@@ -32,6 +32,11 @@ class ApplicantRequest(BaseModel):
 
 class ApplicantResponse(BaseModel):
     token: str
+    # Whether the activation mail actually left the building. The CSP treats
+    # mail as best-effort - the graded contract is machine-to-machine and must
+    # not need an SMTP account - so a browser needs to be told which case it is
+    # in, rather than guessing and hedging at the applicant.
+    email_sent: bool = False
 
 # Subscriber
 class SubscriberRequest(BaseModel):

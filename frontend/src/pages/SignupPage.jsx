@@ -36,7 +36,7 @@ export default function SignupPage() {
         // machine-to-machine and must not need a working SMTP account. It also
         // means this page can offer the activation link directly when no mail
         // server is configured, instead of leaving step 2 a dead end.
-        setResult({ email, token: data?.token, runId });
+        setResult({ email, token: data?.token, runId, emailSent: data?.email_sent === true });
       } else if (status === 409) {
         setError("An account for this email already exists.");
       } else if (status === 400 && data?.error === "invalid_password") {
@@ -57,23 +57,27 @@ export default function SignupPage() {
     return (
       <Card>
         <h1>Check your email</h1>
-        <p>
-          We sent a confirmation link to <strong>{result.email}</strong>. Clicking
-          it is Figure 3 step 2 — the authenticator gets bound to your account
-          and the Verifier is handed the record.
-        </p>
+        {result.emailSent ? (
+          <p>
+            We sent a confirmation link to <strong>{result.email}</strong>.
+            Clicking it is Figure 3 step 2 — the authenticator gets bound to
+            your account and the Verifier is handed the record.
+          </p>
+        ) : (
+          <p>
+            <strong>No mail server is configured on this deployment</strong>, so
+            nothing was sent to {result.email}. Use the link below instead — it
+            is the same one the email would have carried, and following it is
+            Figure 3 step 2: the authenticator gets bound to your account and
+            the Verifier is handed the record.
+          </p>
+        )}
         {result.token && (
-          <>
-            <p className="small-text">
-              No mail server configured for this deployment? The same link, which
-              the CSP also returned directly:
-            </p>
-            <p>
-              <a href={api.activationUrl(result.email, result.token, result.runId)}>
-                Activate this account
-              </a>
-            </p>
-          </>
+          <p>
+            <a href={api.activationUrl(result.email, result.token, result.runId)}>
+              Activate this account
+            </a>
+          </p>
         )}
         <p className="small-text">
           run_id <code>{result.runId}</code> — see it with{" "}
