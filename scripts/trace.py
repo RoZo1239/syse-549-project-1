@@ -145,4 +145,9 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        # Piping into `head` closes the pipe early. That is normal use of a
+        # table-printing script, not an error worth a traceback.
+        os._exit(0)

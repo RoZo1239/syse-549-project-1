@@ -31,7 +31,12 @@ export default function SignupPage() {
       const runId = newRunId();
       const { status, data } = await api.applyForAccount(runId, email, password);
       if (status === 201) {
-        setResult({ email });
+        // The CSP returns the enrollment token in the response as well as
+        // mailing it. That is deliberate: the graded contract is
+        // machine-to-machine and must not need a working SMTP account. It also
+        // means this page can offer the activation link directly when no mail
+        // server is configured, instead of leaving step 2 a dead end.
+        setResult({ email, token: data?.token, runId });
       } else if (status === 409) {
         setError("An account for this email already exists.");
       } else if (status === 400 && data?.error === "invalid_password") {
@@ -53,8 +58,26 @@ export default function SignupPage() {
       <Card>
         <h1>Check your email</h1>
         <p>
-          We sent a confirmation link to <strong>{result.email}</strong>. Click it to
-          finish setting up your account.
+          We sent a confirmation link to <strong>{result.email}</strong>. Clicking
+          it is Figure 3 step 2 — the authenticator gets bound to your account
+          and the Verifier is handed the record.
+        </p>
+        {result.token && (
+          <>
+            <p className="small-text">
+              No mail server configured for this deployment? The same link, which
+              the CSP also returned directly:
+            </p>
+            <p>
+              <a href={api.activationUrl(result.email, result.token, result.runId)}>
+                Activate this account
+              </a>
+            </p>
+          </>
+        )}
+        <p className="small-text">
+          run_id <code>{result.runId}</code> — see it with{" "}
+          <code>python3 scripts/trace.py {result.runId}</code>
         </p>
         <p className="small-text">
           Already confirmed your account? <Link to="/login">Log in</Link>

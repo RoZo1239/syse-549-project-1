@@ -186,7 +186,99 @@ python3 scripts/diagnose.py --check H-ORD     # or look one up directly
 python3 scripts/diagnose.py --all             # the whole table of 24
 ```
 
-### 1.5b Smoke test
+### 1.5b Driving the five steps from the browser, and capturing them
+
+The React UI walks the same five steps a person would walk. It is worth
+knowing exactly which request produces which arrow, because a browser does
+them in a different order than the probe does.
+
+| Figure 3 step | Where in the UI | Request the browser sends |
+|---|---|---|
+| **3** authentication request | landing on `/` with no session | `GET /api/rp/protected`, no credential → `401` + `WWW-Authenticate` |
+| **1** proofing and enrollment | the Sign up form | `POST /api/csp/apply` |
+| **2** authenticator issuance | clicking the activation link | `GET /api/csp/activate?…` → the CSP then `POST`s `/binding` to the Verifier |
+| **4** authentication process | the Log in form | `POST /api/verifier/authenticate` |
+| **5** authenticated session | immediately after, and on the page that follows | `POST /api/rp/session`, then `GET /api/rp/protected` with the session |
+
+**Step 3 comes first, not third.** The probe's Subject agent runs the steps in
+their numbered order because it is a script. A human hits the wall before they
+have an account, which is why `scripts/trace.py` on a browser run shows
+`[3, 1, 2, 2, 4, 5, 5, 5]` and reports `H-ORD: NO`. That is correct for a
+person and would be a failure for the probe — the two drive the system
+differently and the transcript records what actually happened, which is the
+point of having one. Say this out loud if you trace a browser run in the demo.
+
+**If no mail server is configured**, step 2 is not a dead end: the CSP returns
+the enrollment token in the `/apply` response as well as mailing it, and the
+Sign up page offers the activation link directly. That is deliberate — the
+graded contract is machine-to-machine and must not need a working SMTP
+account.
+
+**Correlating the browser with the transcripts.** The Sign up and Protected
+pages both print the `run_id` they used. Copy it:
+
+```bash
+python3 scripts/trace.py web-8f3a1c2e-...
+```
+
+#### Packet capture
+
+The lab server deliberately serves cleartext HTTP so this works. Three things
+decide whether you actually see anything.
+
+**1. Point the frontend at the server, not at loopback.** By default the Vite
+proxy targets `127.0.0.1`, so every request — browser to Vite, Vite to the
+services — is loopback traffic. Wireshark can only see that on the loopback
+interface (`lo` on Linux, `lo0` on macOS, and on Windows only if Npcap was
+installed with "support loopback traffic capture" ticked). To put the five
+steps on a real interface instead:
+
+```bash
+cd frontend
+VITE_API_HOST=daily-server.research.colostate.edu npm run dev
+```
+
+Now browser → Vite is still loopback, but Vite → the four services crosses the
+network in cleartext and captures normally.
+
+**2. Two hops are loopback whichever way you do it**, by design:
+
+- CSP → Verifier `POST /binding` (step 2)
+- RP → Verifier `POST /introspect` (step 5)
+
+Both go over `127.0.0.1` on the server, because
+`shared/config.py::internal_endpoint_for()` sends them there on purpose — the
+assertion has no business crossing the campus network. To see them you have to
+capture on the server's loopback interface:
+
+```bash
+# on the server
+tcpdump -i lo -s0 -w lab1-internal.pcap 'tcp port 4102'
+```
+
+Then open `lab1-internal.pcap` in Wireshark. It is worth doing once: the
+`/introspect` exchange is the single most important pair of packets in the
+whole system, because it is the reason `skip_verifier` fails.
+
+**3. Useful Wireshark display filters:**
+
+```
+http                                     # everything
+tcp.port >= 4100 && tcp.port <= 4103     # just the four services
+http.request.uri contains "authenticate" # step 4
+http.response.code == 401                # every refusal, including step 3
+http.www_authenticate                    # the RFC 9110 15.5.2 challenge
+```
+
+**What you will see in the clear, and should say so:** the password, on
+`POST /apply` and `POST /authenticate`. The assertion handle. The session
+token. All of it, because this is port-80 HTTP with no TLS — which the server
+notes ask for, so the traffic is readable. It is also the honest answer to
+"what is the weakest point in your system": everything below the application
+layer. `docs/analysis.md` §3 says this at more length, and a capture on screen
+is the most convincing way to make the point.
+
+### 1.5c Smoke test
 
 ```bash
 cp team.json team.local.json      # then edit the four URLs to 127.0.0.1

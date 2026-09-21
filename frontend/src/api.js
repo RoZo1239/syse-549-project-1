@@ -25,7 +25,11 @@ async function request(method, url, { body, headers = {} } = {}) {
   } catch {
     // No JSON body (e.g. a 204). Leave data null.
   }
-  return { status: res.status, data };
+  // The challenge itself, not just the status. RFC 9110 15.5.2 requires it on
+  // every 401 and it is the thing worth showing a grader, so it comes back
+  // rather than being thrown away with the rest of the headers.
+  const challenge = res.headers.get("WWW-Authenticate");
+  return { status: res.status, data, challenge };
 }
 
 export const api = {
@@ -33,6 +37,23 @@ export const api = {
   applyForAccount(runId, email, plaintext) {
     return request("POST", `${CSP_BASE}/apply`, {
       body: { run_id: runId, email, plaintext },
+    });
+  },
+
+  // Step 2, for a human: the CSP mails this link; the browser just follows it.
+  // Exposed here so the UI can offer it when no mail server is configured.
+  activationUrl(email, token, runId) {
+    const q = new URLSearchParams({ email, token });
+    if (runId) q.set("run_id", runId);
+    return `${CSP_BASE}/activate?${q}`;
+  },
+
+  // Step 3: ask for the protected resource with NO credential, and get the
+  // RP's 401 + WWW-Authenticate. This is a real request on purpose - the RP
+  // decides whether a caller is authenticated, never the browser.
+  demandAuthentication(runId) {
+    return request("GET", `${RP_BASE}/protected`, {
+      headers: { "X-Run-Id": runId },
     });
   },
 
@@ -50,7 +71,7 @@ export const api = {
     });
   },
 
-  // Step 3 / step 5: the protected resource, with or without a session.
+  // Step 5: the protected resource, with a session.
   protectedResource(runId, session) {
     return request("GET", `${RP_BASE}/protected`, {
       headers: {
