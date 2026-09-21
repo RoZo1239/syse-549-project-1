@@ -193,6 +193,65 @@ class ConfigTestCase(unittest.TestCase):
         with self.assertRaises(config.ConfigError):
             config.require_secret("LAB1_NOT_SET_TOKEN")
 
+class EnrollmentTokenTestCase(unittest.TestCase):
+    """The CSP's account store, around the enrollment token.
+
+    Partner A's service, tested here because the bug it pins is a state bug in
+    shared/user_database.py rather than anything about HTTP.
+    """
+
+    def setUp(self):
+        import tempfile
+        from shared.user_database import UserDatabase
+
+        handle = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        handle.close()
+        self.addCleanup(os.unlink, handle.name)
+        previous = os.environ.get("DB_PATH")
+        os.environ["DB_PATH"] = handle.name
+        self.addCleanup(
+            lambda: os.environ.__setitem__("DB_PATH", previous)
+            if previous is not None else os.environ.pop("DB_PATH", None)
+        )
+        self.db = UserDatabase()
+        self.db.add_user("alice@example.test", "enrollment-token-0123456789",
+                         hash_secret("CANARY-a1b2c3d4e5f6"))
+
+    def test_checking_the_token_does_not_spend_it(self):
+        # Defends against a failed Verifier binding bricking the account. The
+        # CSP has to check the token, attempt the binding, and only mark the
+        # account subscribed if that worked - so the check must not mutate.
+        # Marking first meant one refused binding left the account
+        # subscribed-but-unbound and every retry read "invalid or already used".
+        for _ in range(3):
+            self.assertTrue(
+                self.db.token_matches("alice@example.test",
+                                      "enrollment-token-0123456789"))
+        self.assertFalse(self.db.is_subscribed("alice@example.test"))
+
+    def test_denies_a_wrong_or_reused_enrollment_token(self):
+        # Defends against an attacker finishing somebody else's signup by
+        # guessing the token, and against the same link being redeemed twice.
+        self.assertFalse(self.db.token_matches("alice@example.test", "wrong"))
+        self.assertFalse(self.db.token_matches("nobody@example.test",
+                                               "enrollment-token-0123456789"))
+        self.assertTrue(self.db.subscribe_user("alice@example.test",
+                                               "enrollment-token-0123456789"))
+        self.assertFalse(self.db.token_matches("alice@example.test",
+                                               "enrollment-token-0123456789"))
+        self.assertFalse(self.db.subscribe_user("alice@example.test",
+                                                "enrollment-token-0123456789"))
+
+    def test_the_token_is_compared_without_short_circuiting(self):
+        # Defends against a timing oracle on the enrollment token: `==` on
+        # strings returns as soon as it finds a difference, which leaks how
+        # much of a guess was right.
+        import inspect
+        from shared import user_database
+
+        source = inspect.getsource(user_database.UserDatabase.token_matches)
+        self.assertIn("compare_digest", source)
+
 
 if __name__ == "__main__":
     unittest.main()

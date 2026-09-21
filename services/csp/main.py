@@ -152,7 +152,12 @@ def _complete_subscription(identifier, token, run_id):
     GET /activate below, so there is exactly one code path that ever finishes
     enrollment, whichever way a subscriber reaches it.
     """
-    if identifier is None or not user_db.subscribe_user(identifier, token):
+    # Check the token WITHOUT spending it. The account is marked subscribed at
+    # the bottom, only once the Verifier has the binding: doing it here instead
+    # spent the token before the binding was attempted, so a single failed
+    # binding left the account subscribed-but-unbound and the activation link
+    # dead, with every retry reporting "invalid or already used".
+    if identifier is None or not user_db.token_matches(identifier, token):
         transcript.record(
             run_id=run_id, step=2, actor="csp", peer="applicant",
             outcome="denied", detail="issuance refused: enrollment token not accepted",
@@ -175,6 +180,11 @@ def _complete_subscription(identifier, token, run_id):
         return "verifier_unreachable"
 
     bound = status == 201
+    if bound:
+        # Only now is the applicant a Subscriber. Before this line the account
+        # is still pending and the activation link still works, so a Verifier
+        # that was briefly unhappy costs a retry rather than the account.
+        user_db.subscribe_user(identifier, token)
     # One detail string for both outcomes used to put "authenticator issued and
     # bound" next to outcome="denied", which is a transcript that contradicts
     # itself - and the transcript is the evidence a grader reads.
@@ -238,6 +248,17 @@ def activate(email: str, token: str, run_id: str = ""):
             "Activation incomplete",
             "We could not finish setting up your account. Please try the link again shortly.",
         ), status_code=503)
+    if result == "not_bound":
+        # Distinct from invalid_token on purpose. Blaming the link for a
+        # Verifier that refused the binding sends the subscriber to re-enrol,
+        # which cannot help, and hides the actual fault - usually
+        # LAB1_CSP_BINDING_TOKEN differing between the CSP and the Verifier.
+        return HTMLResponse(_activation_page(
+            "Activation incomplete",
+            "Your link is valid, but we could not finish setting up your "
+            "account. Nothing has been used up - try the same link again "
+            "shortly, or contact whoever runs this service.",
+        ), status_code=502)
     return HTMLResponse(_activation_page(
         "Activation failed",
         "This activation link is invalid or has already been used.",

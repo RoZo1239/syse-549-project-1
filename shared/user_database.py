@@ -1,3 +1,4 @@
+import hmac
 import json
 import os
 import sys
@@ -98,16 +99,24 @@ class UserDatabase:
         except ValueError:
             return None
 
-    def subscribe_user(self, email, token):
+    def token_matches(self, email, token) -> bool:
+        """Is `token` this account's unspent enrollment token? Mutates nothing.
+
+        Split out from subscribe_user so the caller can check the token, do the
+        work that might fail, and only then mark the account subscribed. Doing
+        it the other way round spent the token before the Verifier binding was
+        attempted, so one failed binding left the account subscribed-but-unbound
+        with no way to retry.
+        """
         user = self.get_user(email)
-
-        if(user is None):
+        if user is None or user.subscribed:
             return False
+        # compare_digest, not ==: the enrollment token is a secret, and a
+        # short-circuiting comparison leaks how much of a guess was right.
+        return hmac.compare_digest(str(token), user.subscriber_token)
 
-        if user.subscribed:
-            return False
-
-        if(token != user.subscriber_token):
+    def subscribe_user(self, email, token):
+        if not self.token_matches(email, token):
             return False
 
         with self._connect() as conn:
