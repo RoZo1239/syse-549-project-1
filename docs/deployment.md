@@ -437,9 +437,20 @@ csp       step 2  csp -> subscriber  denied  issuance incomplete: verifier did n
 Enrollment succeeds, step 2 fails, and nothing after it can work — the
 Verifier holds no binding, so `/authenticate` has nothing to check against.
 
-**Fix:** one partner generates both values once and sends them over; the other
-pastes the same two into their own `.env`. Then restart. They are shared
-secrets, not per-person ones.
+**Check first, before regenerating anything.** This prints a short SHA-256
+fingerprint of each token rather than the token itself, so you can compare
+with your partner over chat without putting a shared secret in a chat log:
+
+```bash
+python3 scripts/check_tokens.py
+```
+
+Send your partner both lines. Same fingerprint, same token.
+
+**Fix:** one partner generates each value **once** and sends it over; the
+other pastes the same value into their own `.env`. Then both restart. They are
+shared secrets, not per-person ones — running the generator twice produces two
+different tokens, which is the mistake that causes this in the first place.
 
 ```bash
 python3 -c "import secrets; print('LAB1_CSP_BINDING_TOKEN=' + secrets.token_urlsafe(32))"
