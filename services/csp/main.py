@@ -56,7 +56,15 @@ PUBLIC_URL = config.endpoint_for(SERVICE)
 # port. Same host-resolution reasoning as PUBLIC_URL above: a concrete HOST
 # means "dial this everywhere", and 0.0.0.0 falls back to loopback since the
 # frontend never runs in production either.
-FRONTEND_URL = "http://%s:5173" % (HOST if HOST not in ("0.0.0.0", "::", "") else "127.0.0.1")
+# The port was hardcoded to 5173 here, so the "Log in" link on the activation
+# page pointed at 5173 however the dev server was actually configured - and
+# the subscriber landed on a dead URL immediately after the one step that just
+# succeeded. It reads FRONTEND_PORT now, the same setting run_all.sh and
+# vite.config.js use, so all three agree.
+FRONTEND_PORT = config.int_setting("LAB1_FRONTEND_PORT", 5173)
+FRONTEND_URL = "http://%s:%d" % (
+    HOST if HOST not in ("0.0.0.0", "::", "") else "127.0.0.1", FRONTEND_PORT,
+)
 ACTIVATION_PAGE_TEMPLATE_PATH = os.path.join(
     os.path.dirname(__file__), "templates", "activation_page.html",
 )

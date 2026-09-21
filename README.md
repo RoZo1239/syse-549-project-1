@@ -108,6 +108,10 @@ python3 scripts/diagnose.py --check H-ORD  # or look one up directly
 table it prints is the order the probe will see rather than a tidier one. It
 also restates `H-ORD`, `H-ROL` and `X-FLD` underneath in plain words.
 
+What to actually say while it runs — the flow in plain words, the updated
+diagram, and the three lines to land — is
+[`docs/demo-script.md`](docs/demo-script.md).
+
 The whole demo, in one command:
 
 ```bash

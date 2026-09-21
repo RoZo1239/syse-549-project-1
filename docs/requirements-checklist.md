@@ -65,7 +65,7 @@ Canvas side).
 
 | Requirement | Status | What is left |
 |---|---|---|
-| `lab1-hayagreeva-jonathan.zip`, under 25 MB | **missing** | build it from a clean checkout, after `result.json` exists |
+| `lab1-hayagreeva-jonathan.zip`, under 25 MB | **missing** | `sh scripts/package.sh` once `result.json` exists — it refuses to build until the archive would be correct |
 | Source for all four services | done | |
 | `README.md`: four URLs with ports | done | |
 | `README.md`: how to run from a clean checkout | done | |
@@ -93,6 +93,7 @@ Canvas side).
 | Both partners speaking | — | planned |
 | Services running when the slot begins | — | **open**, same as the campus-reachability row above |
 | Narrate the authoritative guidance out loud | — | built into `scripts/walkthrough.py`: every step prints its SP 800-63-4 or RFC 9110 line |
+| Know what to say while it runs | — | `docs/demo-script.md` — the flow in plain words, the denials, and what to do if it breaks live |
 
 ## 6. Rubric rows the handout does not spell out
 
