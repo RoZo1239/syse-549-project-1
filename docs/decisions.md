@@ -135,13 +135,14 @@ probe asserts: all five steps present at the service that owns each, ascending
 by timestamp, the role progression in order, the canary absent from every
 transcript, and each of the four negatives denied with no successful step 5.
 
-**What the CSP still owes**, and the flow assumes:
+**The CSP's side of the contract**, which the flow depends on:
 
 | Endpoint | Request | Must do |
 |---|---|---|
-| `POST /apply` | `{run_id, email, canary}` | store `shared.pwhash.hash_secret(canary)`, record **step 1 with `actor: "applicant"`**, return `{token}` |
+| `POST /apply` | `{run_id, email, plaintext}` | store `shared.pwhash.hash_secret(plaintext)`, record **step 1 with `actor: "applicant"`**, return `{token}`. `plaintext` is a real password for a human applicant, or the harness's canary for a scripted run. |
 | `POST /subscribe` | `{run_id, email, token}` | mark subscribed, `POST` the stored record to the Verifier's `/binding` with `X-Lab1-Binding-Token`, record **step 2** |
-| `GET /transcript` | — | `{"events": [...]}` — currently returns `Event()`, which raises and answers 500 |
+| `GET /activate` | query: `email, token` | human-facing equivalent of `/subscribe`, answers HTML instead of JSON |
+| `GET /transcript` | — | `{"events": [...]}` |
 
 ### On timestamp precision
 
@@ -151,3 +152,40 @@ apart - the CSP recording step 2 and the Subject recording step 3 - tie, and
 the tie is broken by the order the probe collected the transcripts in, which is
 not chronological. At millisecond precision that inversion failed `H-ORD` on
 most runs; it was caught by `tests/test_subject_flow.py`, not by reasoning.
+
+
+### On a duplicate application, before the first one is activated
+
+`POST /apply` refuses **any** identifier that already has an account, whether
+or not it has been activated. Refusing only the activated ones looked
+equivalent and was not; the cross-review test in
+`tests/test_partner_a_negative.py` found the difference.
+
+The attack it left open is account pre-hijacking:
+
+1. Alice applies. A row is created with her password hash, and an activation
+   link is mailed to her. She has not clicked it yet.
+2. Mallory applies for `alice@example.com` with a password Mallory chose. The
+   row is overwritten — Mallory's hash, a fresh token — and that token is
+   mailed to Alice, because the CSP only ever mails the address on the
+   application.
+3. Alice clicks the link in her own mailbox and activates an account whose
+   password belongs to Mallory.
+
+Every request in that sequence is well-formed, no cryptography is involved, and
+the victim performs the final step herself. It is a clean example of the
+handout's question about defeating a step without breaking anything.
+
+The cost of the fix is that an address with a pending application cannot be
+re-applied for, so an attacker can squat an address the real owner has not
+claimed yet, and a user who mistyped their password before activating has to
+wait. Expiring pending applications is the usual remedy; we have not built it,
+and say so rather than pretending the fix is free.
+
+It also means `/apply` answers `409` for an address that exists and `201` for
+one that does not, which is an enrollment-time account-existence oracle. That
+is a deliberate trade: hiding it means answering `201` to everyone and moving
+the refusal into the email, which is the right design for a real system and
+more machinery than this lab needs. The **authentication** path leaks nothing —
+the Verifier's denial is byte-identical for an unknown identifier and a wrong
+secret, and `docs/analysis.md` §2 has the timings.

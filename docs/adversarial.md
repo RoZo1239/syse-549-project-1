@@ -88,3 +88,32 @@ and CSP are running:
 - the cheapest **social** attack on whatever proofing turns out to be — the one
   that needs no cryptography at all, and the one we expect to be the weakest
   point in the whole system
+
+---
+
+## 14. Pre-hijacking an account that has been applied for but not activated
+
+**Tried:** `POST /apply` for an address, then `POST /apply` for the same
+address again with a different password, without activating in between.
+
+**Found:** the second application succeeded. `201` both times, and the second
+one replaced the stored password hash and the enrollment token.
+
+**Why it matters.** The activation link is always mailed to the address on the
+application, so an attacker never receives one. That looks like the attack is
+contained, and it is not. The attacker applies for a victim's address with a
+password they chose; the victim receives an activation mail they may well have
+been expecting; the victim clicks it and activates an account whose password
+belongs to the attacker. Nothing in the sequence is malformed and no secret is
+guessed. The victim performs the decisive step.
+
+**Fixed.** `POST /apply` now refuses any identifier that already has an
+account, activated or not. The trade-offs — address squatting, and an
+enrollment-time existence oracle — are written down in `docs/decisions.md`
+rather than waved away.
+
+**This one was not found by reading the code.** The duplicate-enrollment
+cross-review test had been skipping for weeks because Partner A's CSP was not
+running. The moment it had a live service to talk to, it failed on the first
+run. It is the second time on this project that running something beat
+reasoning about it.

@@ -14,7 +14,7 @@ import unittest
 from shared.pwhash import hash_secret
 from tests.helpers import Harness, apply_test_env
 
-CANARY = "CANARY-a1b2c3"
+CANARY = "CANARY-a1b2c3d4e5f6"
 RUN_ID = "test-happy_path-000002"
 BINDING_HEADER = {"X-Lab1-Binding-Token": "test-binding-token-0123456789"}
 
@@ -65,6 +65,35 @@ class RelyingPartyTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertNotIn("www-authenticate", headers)
         self.assertNotIn("session", raw.decode("utf-8"))
+
+    def test_the_rp_signposts_enrollment_without_ever_calling_the_csp(self):
+        """Figure 3 has no RP -> CSP arrow, but a dead end is not the answer.
+
+        A subject who was never enrolled has to be told where to enrol, or the
+        only path into the system is out-of-band knowledge. The RP does that
+        with two URLs and no request: the public page and the 401 both name
+        the CSP's /apply and the Verifier's /authenticate, and this test pins
+        the other half of that promise -- that the RP's source contains no
+        call to the CSP at all.
+        """
+        import services.rp.app as rp_module
+
+        _, public = self.rp.request("GET", "/")
+        self.assertIn("/apply", public["enroll_at"])
+        self.assertIn("/authenticate", public["authenticate_at"])
+
+        status, denial = self.rp.request("GET", "/protected")
+        self.assertEqual(status, 401)
+        self.assertIn("/apply", denial["enroll_at"])
+        self.assertIn("/authenticate", denial["authenticate_at"])
+
+        with open(rp_module.__file__, encoding="utf-8") as f:
+            source = f.read()
+        # internal_endpoint_for is what a service calls; endpoint_for only
+        # produces a URL to hand onward. The RP resolves the CSP with the
+        # second and never the first.
+        self.assertNotIn('internal_endpoint_for("csp")', source)
+        self.assertNotIn("csp_url", source)
 
     def test_protected_without_a_session_is_401_with_a_challenge(self):
         # RFC 9110 section 15.5.2 requires the WWW-Authenticate header on a 401.

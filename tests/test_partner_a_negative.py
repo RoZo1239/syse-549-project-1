@@ -23,7 +23,10 @@ from shared import config
 from shared.httpjson import ServiceUnreachable, get_json, post_json
 
 CANARY_PREFIX = "CANARY-"
-ENROLL_PATH = os.environ.get("LAB1_CSP_ENROLL_PATH", "/enroll")
+# The CSP's enrollment contract is no longer a guess: docs/decisions.md
+# fixes it as POST /apply with {run_id, email, plaintext}. The override
+# stays so these tests can be pointed at a CSP that moved the endpoint.
+ENROLL_PATH = os.environ.get("LAB1_CSP_ENROLL_PATH", "/apply")
 
 
 def live(service: str):
@@ -47,7 +50,7 @@ def new_run(scenario: str):
     return {
         "run_id": "xreview-%s-%s" % (scenario, secrets.token_hex(3)),
         "scenario": scenario,
-        "canary": CANARY_PREFIX + secrets.token_hex(3),
+        "canary": CANARY_PREFIX + secrets.token_hex(6),
     }
 
 
@@ -143,14 +146,14 @@ class CspNegativeTestCase(unittest.TestCase):
 
     def setUp(self):
         reset_all()
-        self.identifier = "xreview-%s" % secrets.token_hex(3)
-        self.canary = CANARY_PREFIX + secrets.token_hex(3)
+        self.identifier = "xreview-%s@example.com" % secrets.token_hex(3)
+        self.canary = CANARY_PREFIX + secrets.token_hex(6)
 
     def enrol(self, identifier: str, **extra):
         payload = {
             "run_id": "xreview-enrol-%s" % secrets.token_hex(3),
-            "identifier": identifier,
-            "evidence": "self-asserted",
+            "email": identifier,
+            "plaintext": self.canary,
         }
         payload.update(extra)
         status, body = post_json(CSP_URL + ENROLL_PATH, payload, timeout=10)
@@ -161,13 +164,18 @@ class CspNegativeTestCase(unittest.TestCase):
         return status, body
 
     def test_denies_a_duplicate_enrollment(self):
-        # Defends against one applicant enrolling twice, or an attacker claiming
-        # an identifier that already belongs to a subscriber.
+        # Defends against account pre-hijacking: an attacker applies for an
+        # address that already has an application pending, replacing the stored
+        # password hash with one they chose. The activation link still goes to
+        # the real owner, who clicks it and activates an account whose password
+        # belongs to the attacker. Refusing only *activated* duplicates leaves
+        # this open, which is why the CSP checks user_exists and not
+        # is_subscribed.
         first_status, first_body = self.enrol(self.identifier)
         if first_status not in (200, 201):
-            # The enrollment body is Partner A's [C] choice, so a refusal here
-            # means the assumed field names are wrong, not that the duplicate
-            # check failed. Say which, rather than reporting a false failure.
+            # A refusal here means the CSP's field names have drifted from
+            # docs/decisions.md, not that the duplicate check failed. Say
+            # which, rather than reporting a false failure.
             self.skipTest(
                 "enrollment with the assumed body returned HTTP %s (%s); confirm "
                 "the CSP's field names and LAB1_CSP_ENROLL_PATH"
@@ -175,12 +183,28 @@ class CspNegativeTestCase(unittest.TestCase):
             )
         second_status, second_body = self.enrol(self.identifier)
         self.assertGreaterEqual(second_status, 400, second_body)
+        # And the refusal must not hand the second applicant the first one's
+        # enrollment token, which would let them finish somebody else's signup.
+        self.assertNotIn("token", second_body)
+
+    def test_denies_a_second_application_before_the_first_is_activated(self):
+        # The pre-hijacking window specifically: apply, do NOT activate, then
+        # apply again with a different secret. The second application must not
+        # replace the pending record.
+        first_status, _ = self.enrol(self.identifier)
+        if first_status not in (200, 201):
+            self.skipTest("enrollment with the assumed body returned HTTP %s"
+                          % first_status)
+        second_status, second_body = self.enrol(
+            self.identifier, plaintext="attacker-chosen-secret-0123456789")
+        self.assertGreaterEqual(second_status, 400, second_body)
 
     def test_enrollment_never_answers_with_a_server_error(self):
         # Defends against unhandled exceptions on the enrollment path: a 5xx
         # means input reached code that did not expect it, and it is one
         # debug setting away from returning a stack trace with it.
-        for body in ({}, {"identifier": None}, {"identifier": "x" * 300}):
+        for body in ({}, {"email": None}, {"email": "x" * 300},
+                     {"email": self.identifier, "plaintext": None}):
             status, response = post_json(
                 CSP_URL + ENROLL_PATH, dict(body, run_id="xreview-malformed"), timeout=10
             )
@@ -200,7 +224,7 @@ class CspNegativeTestCase(unittest.TestCase):
         # Defends against a CSP that echoes the authenticator back on enrollment
         # or exposes it through a lookup — the secret must leave the CSP only as
         # a salted hash, and only to the Verifier.
-        status, body = self.enrol(self.identifier, canary=self.canary)
+        status, body = self.enrol(self.identifier)
         if status not in (200, 201):
             self.skipTest("enrollment did not succeed, nothing to inspect")
         self.assertNotIn(self.canary, str(body))

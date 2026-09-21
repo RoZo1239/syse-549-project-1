@@ -49,6 +49,14 @@ class RelyingParty(JsonService):
         # the 401 is the public one, because the claimant is not on this host.
         self.verifier_url = config.internal_endpoint_for("verifier")
         self.verifier_public_url = config.endpoint_for("verifier")
+        # Signposts, not connections. Figure 3 has no arrow from the Relying
+        # Party to the CSP, and there is deliberately no HTTP call to either of
+        # these from anywhere in this file: they are URLs the RP hands to the
+        # party in front of it so a human who is not enrolled, or not yet
+        # authenticated, knows where to go. An RP that *called* the CSP would
+        # be reaching into another service's data and would fail the first
+        # question of the code review.
+        self.csp_public_url = config.endpoint_for("csp")
         self.introspect_token = config.require_secret("LAB1_RP_INTROSPECT_TOKEN")
         self.session_ttl = config.int_setting(
             "LAB1_SESSION_TTL_SECONDS", DEFAULT_SESSION_TTL
@@ -76,6 +84,11 @@ class RelyingParty(JsonService):
             "team": self.team,
             "resource": "public",
             "message": "Public page. The subscriber record lives at /protected.",
+            # Where an Applicant goes to become a Subscriber, and where a
+            # Subscriber goes to become a Claimant. Both are pointers; the RP
+            # calls neither service from here.
+            "enroll_at": self.csp_public_url + "/apply",
+            "authenticate_at": self.verifier_public_url + "/authenticate",
         }, {}
 
     # -- steps 3 and 5: the protected resource -----------------------------
@@ -94,9 +107,15 @@ class RelyingParty(JsonService):
                 outcome="success",
                 detail="no session presented, authentication demanded",
             )
-            return 401, dict(DENIAL, authenticate_at=self.verifier_public_url), {
-                "WWW-Authenticate": CHALLENGE
-            }
+            # The challenge says what is wrong; these two say what to do about
+            # it. Naming the CSP costs nothing an attacker could not learn by
+            # reading team.json, and without it a subject who was never
+            # enrolled has no path forward from a bare 401.
+            return 401, dict(
+                DENIAL,
+                authenticate_at=self.verifier_public_url + "/authenticate",
+                enroll_at=self.csp_public_url + "/apply",
+            ), {"WWW-Authenticate": CHALLENGE}
 
         session = self._lookup_session(presented, request.client_ip)
         if session is None:
