@@ -190,6 +190,15 @@ you did not claim.
 
 #### `channel N: open failed: connect failed: Connection refused`
 
+Run this on the server first — it prints the checkout, the configured port,
+whether a process is alive, what is listening, what answers on loopback, and
+the tail of the log, which between them cover every cause below:
+
+```bash
+sh scripts/frontend_status.sh
+```
+
+
 The tunnel is fine — SSH connected and opened the channel. That message comes
 from the *server* end, and it means nothing is listening on `127.0.0.1:<port>`
 there. In order of likelihood:
