@@ -1,224 +1,78 @@
 # Written analysis — Lab 1, NIST SP 800-63-4 Figure 3
 
-*Drafted by Partner B, completed with Partner A once the Subject agent and
-the CSP were built. Both partners have read all of it.*
+*The submitted 2–3 page version; `lab1-written-analysis.docx` is generated from
+this text, so keep the two in step. Supporting detail that did not fit the page
+limit lives in [`decisions.md`](decisions.md) (the full choice register),
+[`adversarial.md`](adversarial.md) (15 probes) and
+[`security-review.md`](security-review.md) (the six-question review, with a
+paragraph judging its own output).*
 
 ## 1. What we built, mapped to Figure 3
 
-Figure 3 of SP 800-63-4 is the non-federated model: a Credential Service
-Provider, a Verifier and a Relying Party inside one trust boundary, with a
-single subject moving through three roles as five numbered interactions take
-place. We implemented the diagram literally — four processes, one per box, and
-the subject as a scripted agent so that the role transitions are visible in
-code rather than implied.
+We implemented the diagram literally: four processes, one per box, inside a single trust boundary — one host, one organisation, no external identity provider. The Subject is a program rather than a person, which is the lab's teaching device and buys us one real thing: the two role transitions become specific lines of code instead of something implied.
 
-| Figure 3 element | Ours | Port |
-|---|---|---|
-| CSP | `services/csp` | block + 1 |
-| Verifier | `services/verifier` | block + 2 |
-| Relying Party | `services/rp` | block + 3 |
-| Subject (a human in the figure) | `services/subject` | block + 0 |
-| Trust boundary | One host, one organisation, no external identity provider | — |
-| Arrows 1–5 | Five steps, each written to `/transcript` in every service that takes part | — |
-
-What that looks like as a diagram, with our ports and endpoints on it. The
-dashed box is Figure 3's trust boundary: one host, one organisation, no
-external identity provider anywhere.
-
-```
-              +-----------------------------+
-              |      Subject agent  :4100   |     a program, not a person -
-              |  (POST /run drives a run)   |     so the role changes are
-              +-----------------------------+     lines of code, not implied
-                 |   Applicant                        |
-                 |   Subscriber   <-- the same party, |
-                 |   Claimant         three roles     |
-   . . . . . . . | . . . . . . . . . . . . . . . . . .|. . . . . . . . . .
-   .             |                                    |                  .
-   .   (1) POST /apply       (3) 401 + WWW-Authenticate                  .
-   .   (2) POST /subscribe   |                        |                  .
-   .             v           |                        v                  .
-   .      +--------------+   |              +----------------------+     .
-   .      |  CSP   :4101 |   |              |  Relying Party :4103 |     .
-   .      |  accounts,   |   +--------------|  GET /            (public) .
-   .      |  proofing,   |                  |  GET /protected      |     .
-   .      |  issuance    |                  |  POST /session       |     .
-   .      +--------------+                  |  POST /logout        |     .
-   .             |                          +----------------------+     .
-   .             | POST /binding                   ^      |              .
-   .             | (scrypt record, never            |      | POST        .
-   .             |  the secret)                (5) |      | /introspect  .
-   .             v                                 |      v              .
-   .      +-------------------------------------------------------+      .
-   .      |                 Verifier  :4102                       |      .
-   .      |   POST /binding     take the record from the CSP       |      .
-   .      |   POST /authenticate  (4) check control, mint a handle |      .
-   .      |   POST /introspect    (5) redeem the handle -> name    |      .
-   .      +-------------------------------------------------------+      .
-   .                            ^                                        .
-   .                            | (4) POST /authenticate                  .
-   . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . .
-                                |
-                        the Claimant proves control here,
-                        and NOWHERE else in the system
+```text
+       Applicant  -->  Subscriber  -->  Claimant    (one person, three roles)
+           |              |               |
+    (1) apply      (2) activate     (4) prove control
+           v              v               v
+  +----------------------+        +--------------------+
+  |   CSP         :4101  |--(2b)->|  Verifier    :4102 |
+  |   proofing,          | scrypt |  holds the record  |
+  |   enrollment,        | record |  DECIDES yes / no  |
+  |   hashes the secret  |        +--------------------+
+  +----------------------+            |  (5)    ^ introspect
+                                      v         |
+  +---------------------------------------------------+
+  |  Relying Party  :4103                             |
+  |  (3) no session -> 401 + WWW-Authenticate         |
+  |  (5) session    -> the subscriber's record        |
+  +---------------------------------------------------+
+   Subject agent :4100 drives all five as a script.
 ```
 
-Two absences are as deliberate as anything drawn. **There is no arrow from the
-Relying Party to the CSP** — Figure 3 has none, and neither do the federated
-variants in Figures 4 and 5. An RP that could ask the CSP about an account
-would be reaching into another service's store, and the one question a security
-review of this system asks hardest is whether the RP can decide "authenticated"
-without the Verifier. It cannot, because the only way it ever learns an
-identifier is the `/introspect` response. What the RP *does* do is hand a
-stranger two URLs — `enroll_at` and `authenticate_at`, in the public page and
-in the 401 body — so a subject who was never enrolled has somewhere to go. A
-signpost is not a connection, and no request leaves the RP for the CSP.
+The five steps as they run. (1) The Applicant posts an email address and a chosen password to the CSP, which hashes it with scrypt on arrival and mails an activation link. (2) Clicking that link makes them a Subscriber, and the CSP hands the Verifier the salted digest — never the secret. (3) The Subscriber asks the Relying Party for /protected with no session and gets 401 with a WWW-Authenticate header, which RFC 9110 §15.5.2 requires; that refusal is what makes them a Claimant. (4) The Claimant proves control to the Verifier, which mints an opaque single-use handle. (5) The RP redeems that handle by calling the Verifier's /introspect, and only the identifier in that response can become a session.
 
-**There is no arrow from the Relying Party to the Applicant either.** The RP
-meets the subject only as a Subscriber or a Claimant; an Applicant is someone
-the RP has never heard of and has no business knowing about.
+Two absences are as deliberate as anything drawn. There is no arrow from the Relying Party to the CSP — Figure 3 has none, and neither do the federated variants in Figures 4 and 5. An RP that could query the CSP would be reaching into another service's store, and the question a review of this system asks hardest is whether the RP can conclude "authenticated" without the Verifier. It cannot, because /introspect is the only way it ever learns an identifier. What it does do is hand a stranger two URLs — enroll_at and authenticate_at — so someone unenrolled has somewhere to go. A signpost is not a connection. There is no arrow to the Applicant either: the RP meets the subject only as a Subscriber or a Claimant.
 
-The five steps as they actually run:
-
-1. **Identity proofing and enrollment** — the Applicant posts an email address
-   and a chosen password to the CSP's `POST /apply`. The CSP mails an
-   activation link to that address and creates the subscriber account. The
-   evidence is control of the address: whoever can read the mailbox can finish
-   enrolling, and nobody else can. That is IAL1 — self-asserted attributes with
-   one confirmable channel — and we say so rather than claiming more.
-2. **Authenticator issuance** — the CSP issues an authenticator, hashes it with
-   scrypt, and hands the Verifier the resulting record over
-   `POST /binding`. The secret itself never crosses that boundary. This is where
-   the Applicant becomes a Subscriber.
-3. **Authentication request** — the Subscriber asks the RP for `/protected` and
-   gets `401` with `WWW-Authenticate: Lab1-Session realm="lab1-rp"`. RFC 9110
-   §15.5.2 requires that header on a `401`, and it is the single most forgotten
-   line in this lab. Here the Subscriber becomes a Claimant.
-4. **Authentication process** — the Claimant presents the authenticator output
-   to the Verifier, which compares it against the CSP's record and, on success,
-   mints an opaque single-use assertion handle.
-5. **Authenticated session** — the Claimant hands the handle to the RP; the RP
-   calls `POST /introspect` on the Verifier, and only the identifier that comes
-   back in that response can become a session. `GET /protected` then returns
-   `200`.
-
-Ordering is provable rather than asserted: every event carries an ISO 8601 UTC
-timestamp with **microsecond** precision from one shared helper
-(`shared/timeutil.py`), so merging four transcripts by `ts` reconstructs the
-run. Microseconds are not fussiness: the probe sorts by the timestamp *string*
-with a stable sort, so at millisecond precision two events written in the same
-millisecond keep collection order — which is service order, not time order. We
-saw exactly that, as the step sequence `[1,1,2,3,2,4,3,4,5,5,5]`, before
-changing it. `scripts/trace.py` prints the merged table the same way the probe
-sorts it, so the order we see is the order that gets graded.
+Ordering is provable rather than asserted: every event carries a UTC timestamp with microsecond precision from one shared helper, so merging the four transcripts reconstructs the run. Microseconds are not fussiness — at millisecond precision two events written in the same millisecond keep collection order rather than time order, and we observed exactly that inversion before changing it.
 
 ## 2. The design decisions that mattered
 
-The full register is in `docs/decisions.md`. Three choices carried the design.
+Proofing here means control of an email address and nothing more, which is IAL1 — self-asserted attributes with one confirmable channel — and we claim no more than that. The authenticator is a subscriber-chosen memorized secret with a 15-character floor, because SP 800-63B-4 §3.1.1.2 sets that floor for a password used as the sole authentication factor and this system has no second factor anywhere. Revision 4 also removes composition rules and periodic rotation, so we impose neither. Secrets are stored as scrypt records with a 16-byte random salt. There is no administrator account, deliberately; the real bootstrap problem here is the shared token between services, so whoever can write the environment file is the trust anchor. Three choices carried the rest of the design.
 
-**The assertion is an opaque, single-use handle, not a token that carries
-identity.** This is the whole answer to `skip_verifier`. A signed JWT would have
-been equally defensible on paper, but then the RP's decision would rest on
-verifying a signature correctly, and the interesting failures — `alg` confusion,
-a skipped `exp` check, the wrong key — move inside our own code. With a handle,
-there is nothing to forge: the RP cannot learn an identifier except by asking
-the Verifier, so "the RP concluded authenticated without the Verifier checking
-anything" is not a bug we avoided, it is a state the program cannot reach.
+The assertion is an opaque single-use handle, not a token that carries identity. This is the whole answer to the verifier-bypass scenario. A signed JWT would have been equally defensible on paper, but then the RP's decision rests on verifying a signature correctly, and the interesting failures — algorithm confusion, a skipped expiry check, the wrong key — move inside our own code. With a handle there is nothing to forge: the RP cannot learn an identifier except by asking the Verifier, so "the RP concluded authenticated without the Verifier checking anything" is not a bug we avoided, it is a state the program cannot reach.
 
-**Service-to-service calls stay on loopback.** The Verifier → RP edge is the
-load-bearing one, and it has no reason to leave the host all four services run
-on. We found this the hard way: the first version resolved the Verifier through
-the public URL in `team.json`, which sent internal traffic out across the campus
-network and back — and hung for five seconds when that host was unreachable.
+Service-to-service calls stay on loopback. The Verifier-to-RP edge is the load-bearing one and has no reason to leave the host all four services run on. We learned this the hard way: the first version resolved the Verifier through the public campus URL, which sent internal traffic out across the network and back, and hung for five seconds when that host was unreachable.
 
-**Denials are uniform, including in the clock.** One status and one body for a
-wrong secret, an unknown identifier and a malformed request, and the
-unknown-identifier path does the same scrypt work as a real check before
-refusing. Measured on the deployed services: 46.2 ms for an identifier that does
-not exist against 48.1 ms for a wrong secret on one that does.
+Denials are uniform, including in the clock. One status and one body for a wrong secret, an unknown identifier and a malformed request — and the unknown-identifier path does the same scrypt work as a real check before refusing. Measured on the deployed services: 46.2 ms for an identifier that does not exist against 48.1 ms for a wrong secret on one that does.
 
-## 3. Two of the five steps an attacker defeats without breaking cryptography
+## 3. Defeating two of the five steps without breaking cryptography
 
-**Step 1, identity proofing and enrollment.** Nothing here is cryptographic to
-begin with, which is why it is the cheapest step to defeat. Our proofing is
-control of an email address, and nothing else: an applicant claims an address,
-the CSP mails a link there, and clicking it finishes the account. An attacker does not need to break anything — they enroll. Even with a
-stronger model (an invite code, an out-of-band enrollment token), the attack
-does not become cryptographic, it becomes social: work out who can cause a code
-to be issued and send them a plausible request. Every control downstream of step
-1 then works perfectly, on an identity that was never verified. This is the
-enrollment-fraud path, and it is how real breaches usually start.
+Step 1 — identity proofing and enrollment. Nothing here is cryptographic to begin with, which is why it is the cheapest step to defeat. An applicant claims an address, the CSP mails a link there, and clicking it finishes the account. An attacker does not break anything; they enroll. Strengthening the model — an invite code, an out-of-band token — does not make the attack cryptographic, it makes it social: work out who can cause a code to be issued, and send them a plausible request. Every control downstream then works perfectly, on an identity nobody verified. This is the enrollment-fraud path, and it is how real breaches usually start.
 
-**Step 5, the authenticated session.** The session credential is a bearer
-credential: whoever holds it is treated as the subscriber, and reading one off
-the wire is enough, because the lab is deployed over plain HTTP. No cryptography
-is involved in the theft — the attacker copies a string. We pin each session to
-the address it was issued to, which is a real cost to an attacker somewhere else
-on campus and none at all to an attacker on the same host or behind the same
-NAT. Logout revokes and the TTL expires, but both only bound the window; neither
-prevents the copy.
+Step 5 — the authenticated session. The session credential is a bearer credential: whoever holds it is treated as the subscriber, and reading one off the wire is enough, because this lab is deployed over plain HTTP by design so the traffic is readable in a packet capture. No cryptography is involved in the theft — the attacker copies a string. We pin each session to the address it was issued to, which is a real cost to an attacker elsewhere on campus and none at all to one on the same host or behind the same NAT. Logout revokes and the TTL expires, but both only bound the window; neither prevents the copy.
 
-A third, worth one slide: **step 4 by relay.** The authenticator here is a
-secret the claimant sends to the Verifier. Anything that can persuade a claimant
-to send it somewhere else authenticates the relayer just as well, and no
-cryptography has been broken there either.
+A third, briefly: step 4 by relay. The authenticator is a secret the claimant sends to the Verifier, so anything that persuades a claimant to send it somewhere else authenticates the relayer just as well — and no cryptography has been broken there either.
 
 ## 4. The weakest point, named plainly
 
-**Enrollment.** Steps 2 through 5 are careful — secrets are salted and hashed
-with scrypt, the assertion cannot be forged, sessions expire and can be revoked,
-denials say nothing — and all of that care is spent enforcing a binding to an
-identity nobody verified. The strongest authentication in the world answers "is
-this the same party who enrolled?", never "is this party who they said they
-were". An attacker who enrolls as somebody else gets a genuine authenticator, a
-genuine assertion and a genuine session, and every transcript in the system says
-`success`.
+Enrollment. Steps 2 through 5 are careful — secrets salted and hashed, the assertion unforgeable, sessions expiring and revocable, denials saying nothing — and all of that care is spent enforcing a binding to an identity nobody verified. The strongest authentication in the world answers "is this the same party who enrolled?", never "is this party who they said they were". An attacker who enrolls as somebody else gets a genuine authenticator, a genuine assertion and a genuine session, and every transcript in the system reads success.
 
-Second weakest, and the one we would fix first if this were real: the two shared
-tokens in `.env` are static and long-lived, and whoever can read that file can
-mint bindings at the Verifier — which is to say, become any subscriber. That
-makes the host filesystem the actual trust anchor of the design.
+Our own adversarial hour found a sharp instance of this. POST /apply refused only identifiers that were already activated, so an attacker could apply for an address with an application still pending, replacing the stored password hash with one they chose. The activation link still goes to the real owner, who clicks it and activates an account whose password belongs to the attacker. Four well-formed requests, no cryptography, and the victim performs the decisive step. We now refuse any identifier that already exists — at the cost of letting an attacker squat an unclaimed address, and of an enrollment-time account-existence oracle. We think that trade is right here and we can say why; we have not built pending-application expiry, which would remove the squatting cost, and we say so rather than implying the fix was free.
 
-There is deliberately **no account recovery path**. In a real system it would be
-the front door with the weakest lock; we would rather say we have not built one
-than build one late and have it quietly bypass step 4. SP 800-63B-4 prohibits
-knowledge-based authentication ("what was your first pet"), so a recovery flow
-would have to rest on something else — verify the prohibition's exact wording in
-the PDF before saying so on a slide.
+Second weakest: the two shared service tokens are static and long-lived, and whoever reads that file can mint bindings at the Verifier — which is to say, become any subscriber. That makes the host filesystem the actual trust anchor. Third: our rate limiting is nearly useless in a deployment where every legitimate request arrives from the same address an attacker's would. The automated six-question review passed it; we do not. And there is deliberately no account recovery path — in a real system it would be the front door with the weakest lock, and we would rather say we have not built one than build one late and have it quietly bypass step 4.
 
-## 4b. The adversarial hour
+## 5. Where the AI assistant misled us
 
-Thirteen probes against our own services, with what each returned, is in
-[`adversarial.md`](adversarial.md). The most interesting result was not a
-break: our first "timing leak" turned out to be our own rate limiter firing,
-and chasing that false positive produced the real finding — that per-address
-rate limiting is close to useless in a deployment where every legitimate
-request comes from the same host as an attacker's would.
+The pattern across all of these is the same: the assistant is most dangerous when it is fluent about something only a measurement can settle. Every one was caught by running something, not by reading.
 
-## 5. Where the automated review was wrong
+- It reported a timing leak that was its own rate limiter. 1 ms against 40 ms looked like a serious oracle. Re-measured per source address it was 46.2 ms against 48.1 ms. The finding was an artefact of how the measurement was taken — and the real finding underneath was the rate-limiting weakness named above.
 
-The six-question review is in `docs/security-review.md`, with a paragraph
-judging its own output. The short version: the pass on question 2 is only worth
-something because the architecture makes the failure unreachable — the same
-review, run against a JWT design, would have produced the same verdict from the
-same reading and been worth much less. And the review is soft on question 4 in
-exactly the place a generic pass does not look: our rate limiting is nearly
-useless in a deployment where every legitimate request arrives from the same
-address as an attacker's would.
+- It resolved an internal call through the public campus URL. That worked in tests and hung in deployment. Running the system found it; reading the code did not.
 
-## 6. Where the AI misled us
+- It wrote sample output it had never run. A deployment document contained a plausible "all four services up" transcript that no run had produced. We replaced it with observed output and marked the one line that was not from a run.
 
-The full log is `docs/ai-errors.md`. Three worth the presentation:
+- It cannot verify NIST section numbers from its environment. Every citation in this document is therefore checked against the published PDF rather than taken on its word — which is the discipline the lab asks for: quote it, or it does not exist.
 
-- It resolved an internal service-to-service call through the public campus URL,
-  which worked in tests and hung in deployment. Running the thing found it;
-  reading the code did not.
-- It rated its own denial path as constant-time on inspection. Measuring it
-  showed the first measurement was wrong for an unrelated reason (its own rate
-  limiter, firing early), and the "finding" evaporated on a second look. An
-  assistant is as confident when it is measuring the wrong thing as when it is
-  right.
-- It cannot verify NIST section numbers in this environment — the documents are
-  not reachable from it. Every citation in these documents is therefore marked
-  for checking against the PDF before the presentation, which is the discipline
-  the lab asks for: quote or it does not exist.
+Used well, it was most valuable writing negative tests and role-playing an attacker against our own enrollment process — which is how the pre-hijacking defect in §4 was found.
