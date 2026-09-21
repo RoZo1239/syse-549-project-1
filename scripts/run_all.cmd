@@ -47,6 +47,15 @@ if !FAILED! GTR 0 (
     echo all requested services up: %WANTED%
 )
 
+rem Where to go next. The /health lines above only prove the services are
+rem listening; these are how you see the model actually run.
+echo.
+echo == next ==
+echo   python scripts\walkthrough.py            one Figure 3 step per screen
+echo   python scripts\walkthrough.py --all      all five scenarios, in order
+echo   python scripts\trace.py --last           all four transcripts, merged
+echo   python conformance_probe.py --config team.json --verbose
+
 endlocal
 exit /b 0
 

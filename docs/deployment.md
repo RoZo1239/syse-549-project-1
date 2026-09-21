@@ -1,18 +1,14 @@
 # Deployment and test procedure
 
-Every command below has been run from a clean clone. Where the result depends
-on work that is not finished yet, the expected output says so.
+Every command below has been run from a clean clone with all four services up.
+Where a result depends on something not finished yet, the expected output says
+so.
 
-Two things could not be run in the environment this was written in and are
-therefore *not* verified here: `pip install -r requirements.txt` (no network),
-and consequently Partner A's two services starting. Everything else below was
-executed.
-
-**Status this procedure was verified against:** the Verifier and RP are
-complete; the Subject agent and CSP answer `/health`, `/transcript` and
-`/reset` but have no `POST /run`, no enrollment and no binding. So the probe
-scores **12 of 24** with all four running, and the end-to-end flow has to be
-driven by hand (part 3 below) until `POST /run` exists.
+**Status this procedure was last verified against:** all four services
+complete, all five scenarios working, `85 tests ... OK` and **24 of 24 checks,
+10.0 / 10** from the probe with the four running on one host. The deployment on
+`daily-server` last scored **21 of 24** — same code, so that gap is a
+deployment difference and part 2 is where it gets chased, not the services.
 
 ---
 
@@ -31,6 +27,7 @@ produced locally and copied up. **You can do all of this on the server.**
 | Part 2.3, the probe | **your laptop** | a probe run on the server can pass while the firewall blocks everyone else; `result.json` should come from the path a grader would use |
 | Part 3, the flow by hand | the server | it calls `127.0.0.1` and imports `shared.pwhash` |
 | Part 4 | the server, then your laptop for the demo | |
+| The frontend | wherever you are demoing from | it is a dev server on `:5173` that proxies to the four; it is **not** part of the graded contract |
 
 The probe and the tests are standard-library Python, so your laptop needs a
 clone of the repo and nothing else installed.
@@ -46,9 +43,10 @@ python3 --version      # 3.8 or newer
 curl --version
 ```
 
-Partner B's services (`verifier`, `rp`) and the whole test suite are standard
-library only. Partner A's services (`subject`, `csp`) are FastAPI apps and need
-four packages.
+Partner B's services (`verifier`, `rp`), the whole test suite and every script
+in `scripts/` are standard library only. Partner A's services (`subject`,
+`csp`) are FastAPI apps and need four packages. The React frontend needs
+Node.js, and only if you want it — nothing graded depends on it.
 
 ### 1.2 Clone and configure
 
@@ -120,7 +118,75 @@ line reads `4 of 4 up: subject csp verifier rp`.
 Start or stop one at a time by naming it: `sh scripts/run_all.sh rp`,
 `sh scripts/stop_all.sh rp`.
 
-### 1.5 Smoke test
+The script prints a `== next ==` block pointing at the three scripts in 1.5.
+
+### 1.4b The React frontend (optional, and never graded)
+
+```bash
+cd frontend && npm install && cd ..
+sh scripts/run_all.sh subject csp verifier rp frontend
+```
+
+Then open <http://localhost:5173>. Sign up (CSP), log in (Verifier then RP),
+read the protected resource (RP) — the same five steps a browser-shaped way.
+
+Two things to know before demoing it. Vite proxies `/api/csp`,
+`/api/verifier` and `/api/rp` to `127.0.0.1:4101-4103`
+(`frontend/vite.config.js`), so the browser stays same-origin and never hits
+the backends' missing `OPTIONS` handling; and `frontend` is deliberately **not**
+in the default set, so `sh scripts/run_all.sh` on its own still prints exactly
+`4 of 4 up: subject csp verifier rp`, which is the line worth screenshotting.
+
+Without `npm install` the script says so and starts the other four anyway:
+
+```
+  frontend NOT started - run 'npm install' in frontend/ first
+```
+
+### 1.5 Watch it actually run
+
+Three scripts, in the order you will reach for them.
+
+**`walkthrough.py` — one Figure 3 step per screen.** This is the one to use
+live. `POST /run` does all five steps in one call and answers with a verdict,
+which is what the probe wants and the opposite of what an audience or a
+debugger needs.
+
+```bash
+python3 scripts/walkthrough.py                  # happy_path, pausing at each step
+python3 scripts/walkthrough.py skip_verifier    # or any of the five scenarios
+python3 scripts/walkthrough.py --all            # all five, in order
+python3 scripts/walkthrough.py --no-pause       # straight through
+```
+
+Each screen shows the request that goes out, the status and body that come
+back, the role transition it causes, and one sentence tying it to SP 800-63-4
+or RFC 9110 — which is the "tied to authoritative guidance" the Live Demo row
+of the rubric asks for. The authenticator secret is never printed, only its
+length. It ends with the merged transcript for that run.
+
+**`trace.py` — all four transcripts, merged.** No single `/transcript` shows
+the flow, because each service records only the steps it took part in.
+
+```bash
+python3 scripts/trace.py --last         # the most recent run
+python3 scripts/trace.py <run_id>       # one run, e.g. one the probe drove
+python3 scripts/trace.py --json         # the merged events, for a script
+```
+
+It sorts by `ts` exactly the way the probe's `H-ORD` check does, so the table
+is the order that gets graded rather than a tidier one, and it restates
+`H-ORD`, `H-ROL` and `X-FLD` underneath in plain words.
+
+**`diagnose.py` — a failed check, turned into the next command.**
+
+```bash
+python3 scripts/diagnose.py result.json       # explain everything that failed
+python3 scripts/diagnose.py --check H-ORD     # or look one up directly
+python3 scripts/diagnose.py --all             # the whole table of 24
+```
+
+### 1.5b Smoke test
 
 ```bash
 cp team.json team.local.json      # then edit the four URLs to 127.0.0.1
@@ -138,7 +204,7 @@ valid JSON with sub-second timestamps.
 python3 -m unittest discover -s tests -t .
 ```
 
-Expected: `Ran 69 tests ... OK (skipped=10)`. The ten skips are Partner B's
+Expected: `Ran 85 tests ... OK (skipped=10)`. The ten skips are Partner B's
 cross-review tests for Partner A's services; they run when those services are
 up:
 
@@ -156,15 +222,22 @@ services on ephemeral ports.
 python3 conformance_probe.py --config team.local.json --verbose
 ```
 
-Expected **today**, with all four services running: `12 of 24 checks passed,
-5.0 / 10`, with all seven `H-*` and all four `N-*` failing because `POST /run`
-answers `404`. If Partner A's two are not running it is `9 of 24` instead —
-the three `S-*`/`P-*` checks that need them fail as well. Once `POST /run`
-exists and follows the sequence in
-[`decisions.md`](decisions.md#what-post-run-has-to-do-scenario-by-scenario),
-the same command scores 24 of 24 — that has been measured with a stand-in
-driver, so the gap really is only `POST /run` plus the CSP's enrollment and
-binding.
+Expected with all four services running on one host: `24 of 24 checks passed,
+10.0 / 10`. If Partner A's two are not running it drops to `9 of 24` — the
+`S-*` and `P-*` checks that do not need them still pass, and everything that
+drives a scenario fails.
+
+Anything in between means a specific check is unhappy, and the answer is not to
+start editing services:
+
+```bash
+python3 conformance_probe.py --config team.local.json --json result.json
+python3 scripts/diagnose.py result.json
+```
+
+That names what each failed check was asking and the command to run next. The
+five scenarios and the two easy-to-miss ordering constraints are in
+[`decisions.md`](decisions.md#the-five-scenarios-as-sequences).
 
 ---
 
@@ -250,8 +323,26 @@ pip install --user -r requirements.txt
 sh scripts/run_all.sh
 ```
 
+Expect `4 of 4 up: subject csp verifier rp`, then the `== next ==` block. If a
+service is DOWN, the line under it names the reason and `run/<service>.log` has
+the rest — a missing token, a port already held, a missing package.
+
+Prove the model works on the server before worrying about the network:
+
+```bash
+python3 scripts/walkthrough.py --no-pause --all
+```
+
+All five scenarios, every request and response on screen. If those pass on
+loopback and the probe still scores low from your laptop, the problem is 2.2,
+not the code.
+
 `tmux` instead of `nohup` if you want to watch them:
 `tmux new -s lab1` then a pane per service.
+
+The frontend is not deployed to the server. It is a Vite dev server that
+proxies to `127.0.0.1`, so run it wherever you are demoing from, against a
+local copy of the four services — or skip it. Nothing graded touches it.
 
 ### 2.2 Confirm it is reachable
 
@@ -288,12 +379,34 @@ python3 conformance_probe.py --config team.json --json result.json
 `result.json` from a run against the **deployed** system is a required
 deliverable. Commit it.
 
+If it is not 24 of 24, do not start editing services — the same code scores 24
+of 24 on one host, so a lower number here is a deployment difference. Ask the
+result file what is wrong:
+
+```bash
+python3 scripts/diagnose.py result.json
+```
+
+It prints, for each failed check, what that check was actually asking, what
+usually causes it, and the next command to run. `P-WWW` failing only from off
+host is the signature of a proxy stripping the header; `H-ORD` is timestamp
+precision; anything in `H-ST*` is usually the `run_id` not being threaded
+through.
+
 ---
 
 ## Part 3 — Driving the flow by hand
 
-Until `POST /run` exists this is how to see all five steps, and it is also the
-live demo. Run it from the repo so `shared.pwhash` is importable.
+**Read this second.** The live demo is `scripts/walkthrough.py` (1.5 above) or
+`sh scripts/demo.sh`, which run the same five steps with the request, the
+response and the NIST or RFC line on screen for each one, and without putting
+the authenticator secret on a projector.
+
+What follows is the same flow with no tooling at all — raw `curl`, one call at
+a time. Keep it for two reasons: it is what you fall back to if a script
+misbehaves in front of the room, and it is the honest answer when someone asks
+"is the script doing something clever?" It is not. Run it from the repo so
+`shared.pwhash` is importable.
 
 ```bash
 export V=http://127.0.0.1:4102 R=http://127.0.0.1:4103
@@ -341,6 +454,9 @@ curl -sS -H "Authorization: Lab1-Session $SESSION" $R/protected
 
 ### The denials — pick two for the demo
 
+(Or run `python3 scripts/walkthrough.py wrong_authenticator` and friends, which
+show the same thing with the reasoning on screen. The raw calls are below.)
+
 ```bash
 # skip_verifier: a self-asserted identity, no Verifier involved
 curl -sS -o /dev/null -w 'self-asserted identity     -> %{http_code}\n' \
@@ -365,54 +481,89 @@ All four return `401`. Verified from a clean clone.
 ### Show the transcript
 
 ```bash
-python3 - "$RUN" <<'PY'
-import json, sys, urllib.request
-run = sys.argv[1]; events = []
-for name, port in (("csp", 4101), ("verifier", 4102), ("rp", 4103)):
-    try:
-        doc = json.load(urllib.request.urlopen("http://127.0.0.1:%d/transcript" % port))
-    except Exception as exc:
-        print("%-8s unreachable: %s" % (name, exc)); continue
-    events += [dict(e, svc=name) for e in doc["events"] if e["run_id"] == run]
-for e in sorted(events, key=lambda e: e["ts"]):
-    print("%s  step %d  %-10s %-8s %s" % (e["ts"], e["step"], e["actor"], e["outcome"], e["svc"]))
-PY
+python3 scripts/trace.py "$RUN"
 ```
 
 Observed, in timestamp order:
 
 ```
-2026-09-12T02:14:46.255Z  step 2  csp        success  verifier
-2026-09-12T02:14:46.262Z  step 3  subscriber success  rp
-2026-09-12T02:14:46.339Z  step 4  claimant   success  verifier
-2026-09-12T02:14:46.355Z  step 5  verifier   success  verifier
-2026-09-12T02:14:46.356Z  step 5  rp         success  rp
-2026-09-12T02:14:46.392Z  step 5  rp         success  rp
+#    service   step  step_name                          actor -> peer          outcome  detail
+1    csp       1     identity_proofing_and_enrollment   applicant -> csp       success  evidence accepted, subscriber account created
+2    verifier  2     authenticator_enrollment_issuance  csp -> verifier        success  binding record accepted, authenticator bound...
+3    csp       2     authenticator_enrollment_issuance  csp -> subscriber      success  authenticator issued and bound to the subscriber account
+4    rp        3     authentication_request             subscriber -> rp       success  no session presented, authentication demanded
+5    verifier  4     authentication_process             claimant -> verifier    success  authenticator control proven, single-use assertion issued
+6    verifier  5     authenticated_session              verifier -> rp         success  subscriber identifier asserted to the relying party
+7    rp        5     authenticated_session              rp -> verifier         success  verifier asserted the identifier, session established
+8    rp        5     authenticated_session              rp -> subscriber       success  protected resource served to an authenticated session
+
+  step order observed : [1, 2, 2, 3, 4, 5, 5, 5]
+  ascending, all five : yes   (the probe's H-ORD check)
+  role progression    : applicant -> subscriber -> claimant   (the probe's H-ROL check)
+  secret-bearing names: none   (the probe's X-FLD check)
 ```
 
-The last line is `/protected` being served; the one before it is the session
-being established. That `actor` column is the
-Applicant → Subscriber → Claimant progression the probe checks as `H-ROL`;
-`applicant` appears once the CSP records step 1.
+Line 8 is `/protected` being served; line 7 is the session being established.
+That `actor` column is the Applicant → Subscriber → Claimant progression the
+probe checks as `H-ROL`, and the three lines underneath are the probe's own
+`H-ORD`, `H-ROL` and `X-FLD` restated in words. If any of them reads wrong
+here, it will read wrong in the grader's run too.
+
+Timestamps carry **microseconds**. At millisecond precision the CSP's step 2
+and the Subject's step 3 tie, the probe's stable sort breaks the tie by
+collection order rather than time, and `H-ORD` fails. See
+[`decisions.md`](decisions.md#a5-on-timestamp-precision).
 
 ---
 
 ## Part 4 — Before the presentation
+
+### The rehearsal
+
+```bash
+sh scripts/demo.sh
+```
+
+The whole demo segment in order: the four services up, the happy path one step
+per screen, three denial scenarios, then the probe. It pauses between steps;
+`sh scripts/demo.sh --no-pause` runs it straight through for a timing check.
+
+Off campus, `team.json`'s hostname will not resolve and the probe at the end
+reports 3 of 24 for a system running perfectly in front of you. Point it at a
+loopback config instead:
+
+```bash
+LAB1_PROBE_CONFIG=team.local.json sh scripts/demo.sh
+```
+
+The lab asks for at least two denials; `demo.sh` shows three, because
+`skip_verifier` is the one the whole architecture exists to fail, and because
+`wrong_authenticator` and `unenrolled_claimant` back to back are the clearest
+way to show the two refusals are identical.
+
+### The checks
 
 ```bash
 sh .claude/skills/lab1-adversary/scripts/attack_curls.sh team.json   # adversarial hour
 sh .claude/skills/lab1-review/scripts/hygiene_scan.sh .              # before zipping
 ```
 
-The hygiene scan will report two known items: `.env` on disk, which is
-gitignored and must be excluded from the zip, and a "private key material"
-hit on the scanner itself, which is the script matching its own search
-pattern. `result.json` must be present from a **deployed** run.
+The hygiene scan will report known items that are not problems: `.env` on disk,
+which is gitignored and must be excluded from the zip; `__pycache__`
+directories, likewise gitignored; and a "private key material" hit on the
+scanner itself, which is the script matching its own search pattern.
+`result.json` must be present, from a **deployed** run.
 
-Checklist for the slot itself:
+### Checklist for the slot itself
 
 - [ ] all four services already running before the slot begins
 - [ ] reachable from a machine that is not the server
-- [ ] `sh scripts/run_all.sh` output saved or on screen — it is the fastest proof they are up
+- [ ] `sh scripts/run_all.sh` output saved or on screen — the fastest proof they are up
+- [ ] `sh scripts/demo.sh` rehearsed end to end, against the deployment
 - [ ] a fresh `run_id` for the live demo, and `/reset` sent first
 - [ ] the probe run and `result.json` written
+- [ ] the frontend started too, if you are demoing it (`sh scripts/run_all.sh subject csp verifier rp frontend`)
+- [ ] each partner has walked through the *other* partner's two services once
+
+The last row is the one the rubric scores off-script, and it is the cheapest
+seven points on the sheet.

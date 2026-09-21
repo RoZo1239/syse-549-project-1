@@ -99,6 +99,9 @@ python3 scripts/trace.py                # every run, all four transcripts, merge
 python3 scripts/trace.py --last         # just the most recent run
 python3 scripts/trace.py <run_id>       # one run, e.g. a probe's
 python3 scripts/trace.py --json         # the merged events, for a script
+
+python3 scripts/diagnose.py result.json    # a failed probe check -> the next command
+python3 scripts/diagnose.py --check H-ORD  # or look one up directly
 ```
 
 `trace.py` sorts by `ts` exactly the way the probe's `H-ORD` check does, so the
@@ -147,7 +150,9 @@ python3 conformance_probe.py --config team.json --json result.json
 
 Every service exposes `GET /health`, `GET /transcript` and `POST /reset`. The
 endpoints below are the team's own design choices, recorded in
-[`docs/decisions.md`](docs/decisions.md).
+[`docs/decisions.md`](docs/decisions.md) — which also carries the full project
+workflow: how a run travels end to end, how the two halves were built in
+parallel, and the day-to-day loop.
 
 **CSP** (port block + 1)
 
