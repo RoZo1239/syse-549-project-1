@@ -190,6 +190,15 @@ you did not claim.
 
 #### `channel N: open failed: connect failed: Connection refused`
 
+Run this on the server first — it prints the checkout, the configured port,
+whether a process is alive, what is listening, what answers on loopback, and
+the tail of the log, which between them cover every cause below:
+
+```bash
+sh scripts/frontend_status.sh
+```
+
+
 The tunnel is fine — SSH connected and opened the channel. That message comes
 from the *server* end, and it means nothing is listening on `127.0.0.1:<port>`
 there. In order of likelihood:
@@ -206,7 +215,16 @@ ss -tln | grep 517                               # is anything listening?
   `npm rebuild esbuild`, then start it again.
 - **It is on a different port.** With `strictPort` it now errors instead, but
   an older checkout would have moved to 5174 and said so in a line that is
-  easy to miss. `tail` the log and tunnel to what it actually printed.
+  easy to miss. `tail` the log and tunnel to what it actually printed. A
+  server already running from before a `FRONTEND_PORT` change is the same
+  thing: `run_all.sh` sees the pidfile, leaves it alone, and then health-checks
+  the *new* port. `sh scripts/stop_all.sh frontend` first.
+- **It bound IPv6 loopback only.** Vite's default host is the *name*
+  `localhost`, and on a machine where that resolves to `::1` first, it binds
+  `[::1]:PORT` and nothing on `127.0.0.1`. `ssh -L PORT:127.0.0.1:PORT` is
+  then refused by the server end. `vite.config.js` now pins the literal
+  `127.0.0.1` so this cannot happen, but on an older checkout check with
+  `ss -tln | grep <port>` — if it says `[::1]`, that was the cause.
 
 A partner already holding the port does *not* produce this error: you would
 reach their page instead of a refusal.
